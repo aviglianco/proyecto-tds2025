@@ -368,7 +368,7 @@ func (builder Builder) buildExpr(n *sitter.Node) (Expr, error) {
 		"rel_eq", "rel_lt", "rel_gt",
 		"bool_conjunction", "bool_disjunction":
 		return builder.buildBinaryExpr(n)
-	case "unary_expression": // if you decide to name it so
+	case "-", "!": // if you decide to name it so
 		return builder.buildUnaryExpr(n)
 	case "(": // parenthesized
 		inner := n.NamedChild(0)

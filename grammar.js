@@ -69,7 +69,8 @@ export default grammar({
         seq($.method_call, ";"),
         seq($.return_statement, ";"),
         $.if_statement,
-        $.while_statement
+        $.while_statement,
+        $.block
       ),
 
     while_statement: ($) => seq("while", "(", $._expression, ")", $.block),
