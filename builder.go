@@ -366,9 +366,9 @@ func (builder Builder) buildExpr(n *sitter.Node) (Expr, error) {
 		return builder.buildCallExpr(n)
 	case "int_sum", "int_sub", "int_prod", "int_div",
 		"rel_eq", "rel_lt", "rel_gt",
-		"bool_conjunction", "bool_disjunction":
+		"bool_conjunction", "bool_disjunction", "int_rem":
 		return builder.buildBinaryExpr(n)
-	case "-", "!": // if you decide to name it so
+	case "minus", "bool_not": // if you decide to name it so
 		return builder.buildUnaryExpr(n)
 	case "(": // parenthesized
 		inner := n.NamedChild(0)
@@ -421,6 +421,9 @@ func (builder Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 	case "int_div":
 		op = BinDiv
 		t = TypeInteger
+	case "int_rem":
+		op = BinRem
+		t = TypeInteger
 	case "rel_eq":
 		op = BinEq
 		t = TypeBool
@@ -437,6 +440,11 @@ func (builder Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 		op = BinOr
 		t = TypeBool
 	}
+
+	if n.Kind() == "int_rem" {
+		fmt.Println(t)
+	}
+
 	return &BinaryExpr{NodeBase: NodeBase{Line: nodeLine(n)}, Left: l, Op: op, Right: r, Type: t}, nil
 }
 

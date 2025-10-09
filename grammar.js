@@ -65,6 +65,7 @@ export default grammar({
 
     _statement: ($) =>
       choice(
+        ";",
         seq($.assignment_statement, ";"),
         seq($.method_call, ";"),
         seq($.return_statement, ";"),
@@ -131,12 +132,13 @@ export default grammar({
           $._bool_const,
           $.identifier,
           $.method_call,
-          seq("-", $._expression),
-          seq("!", $._expression)
+          $.minus,
+          $.bool_not
+          
         )
       ),
 
-    _rel_operation: ($) => choice($.rel_gt, $.rel_lt, $.rel_eq),
+    _rel_operation: ($) => choice($.rel_gt, $.rel_lt, $.rel_eq, $.int_rem),
 
     rel_eq: ($) =>
       prec.left(
@@ -164,6 +166,8 @@ export default grammar({
       prec.left(
         seq(field("left", $._expression), "||", field("right", $._expression))
       ),
+    
+    bool_not: ($) => prec.right(2, seq("!", $._expression)),
 
     _int_operation: ($) => choice($.int_prod, $.int_div, $.int_sum, $.int_sub),
 
@@ -184,7 +188,14 @@ export default grammar({
     int_sub: ($) =>
       prec.left(
         seq(field("left", $._expression), "-", field("right", $._expression))
+      ),    
+    int_rem: ($) =>
+      prec.left(
+        seq(field("left", $._expression), "%", field("right", $._expression))
       ),
+
+    minus: ($) => prec.right(2, seq("-", $._expression)),
+
 
     // ────────────────────────────────────────────────────────────────────────────
     // Terminals

@@ -226,6 +226,7 @@ const (
 	BinSub
 	BinMul
 	BinDiv
+	BinRem
 
 	// relational
 	BinEq
@@ -247,6 +248,8 @@ func (op BinOp) String() string {
 		return "*"
 	case BinDiv:
 		return "/"
+	case BinRem:
+		return "%"
 	case BinEq:
 		return "=="
 	case BinLT:
