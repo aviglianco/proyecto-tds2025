@@ -1,0 +1,10 @@
+program {
+  integer id(integer x) { return x; }
+
+  void main() {
+    integer id = 7;        // shadows the function name in this scope (legal)
+    integer y = id;        // refers to the variable, not the function
+    { integer id = 3; y = id; } // nested shadow
+    return;
+  }
+}

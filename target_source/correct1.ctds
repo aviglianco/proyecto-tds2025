@@ -1,0 +1,55 @@
+program {
+  // --- global var (auto-initialized to 0 in general; here we set it)
+  integer g = 42;
+
+  // --- extern library calls (declared before use)
+  integer get_int() extern;
+  void print_int(integer i) extern;
+  void print_bool(bool b) extern;
+
+  // --- arithmetic/returning function
+  integer inc(integer x) {
+    return x + 1;
+  }
+
+  // --- conditionals + typed returns on both branches
+  integer max(integer a, integer b) {
+    if (a > b) then { return a; } else { return b; }
+  }
+
+  // --- void function: can 'return;' (no expr)
+  void noop() { ; return; }
+
+
+
+  void main() {
+    integer i = 0;
+    bool flag = false;
+
+    // block-level shadowing of a global (legal)
+    integer g = 1;
+
+    // call as expression and as statement (result ignored)
+    i = inc(get_int());
+    inc(0);
+
+    // arithmetic + unary minus + % + parentheses (exercise precedence)
+    i = (i * 2 + -1) / 3 % 2;
+
+    // relational + equality + logical with short-circuit types
+    flag = (i < 10) && !(i == 5);
+    flag = flag || (true == false);
+
+    // while + nested block + empty statement
+    while (i < 5 && !flag) {
+      { integer t = i; ; }
+      i = i + 1;
+      if (i == 3) then { print_int(i); } else { ; }
+    }
+
+    // print results via externs
+    print_bool(flag);
+    print_int(g);
+    return;
+  }
+}

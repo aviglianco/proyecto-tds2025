@@ -1,0 +1,11 @@
+program {
+  void main() {
+    // Both comment styles must scan correctly:
+    // one-line
+    /* multi
+       line */
+    integer WHILE = 1;     // 'WHILE' is just an identifier (keywords are lowercase)
+    integer whiletrue = 2; // single identifier, not 'while' + 'true'
+    return;
+  }
+}
