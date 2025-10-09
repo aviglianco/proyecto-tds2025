@@ -216,6 +216,7 @@ func (an *Analyzer) checkExprStmt(e *ExprStmt) {
 }
 
 // checkExpr returns (type, ok) where ok indicates whether the type could be inferred despite errors recorded
+// TODO: tomar el tipo del arbol, no hacer switch
 func (an *Analyzer) checkExpr(e Expr, allowVoidCall bool) (TypeKind, bool) {
 	switch ex := e.(type) {
 	case *IntLiteral:
