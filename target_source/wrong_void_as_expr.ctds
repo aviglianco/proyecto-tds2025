@@ -1,0 +1,6 @@
+program {
+  void print_int(integer x) extern;
+  void main() {
+    integer z = print_int(1); // ERROR: void call in an expression
+  }
+}

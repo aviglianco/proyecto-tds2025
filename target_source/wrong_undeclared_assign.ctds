@@ -1,0 +1,6 @@
+program {
+  void main() {
+    x = 1;           // ERROR: 'x' not declared in any visible scope
+    integer x = 0;
+  }
+}

@@ -1,0 +1,7 @@
+program {
+  integer inc(integer x) { return x + 1; }
+  void main() {
+    integer a = inc(true);   // ERROR: type mismatch (bool vs integer)
+    integer b = inc(1, 2);   // ERROR: wrong number of arguments
+  }
+}

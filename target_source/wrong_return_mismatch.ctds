@@ -1,0 +1,6 @@
+program {
+  integer f() {
+    return true; // ERROR: must return integer
+  }
+  void main() { return; }
+}

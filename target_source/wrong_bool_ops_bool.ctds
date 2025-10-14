@@ -1,0 +1,6 @@
+program {
+  void main() {
+    bool b = 1 && 2; // ERROR
+    bool c = !1;     // ERROR
+  }
+}

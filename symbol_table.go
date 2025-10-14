@@ -11,9 +11,10 @@ type ParamInfo struct {
 }
 
 type FuncInfo struct {
-	Return TypeKind
-	Params []ParamInfo
-	Arity  int
+	Return   TypeKind
+	Params   []ParamInfo
+	Arity    int
+	DeclLine int
 }
 
 type Symbol struct {

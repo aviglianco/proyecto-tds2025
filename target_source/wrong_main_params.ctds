@@ -1,0 +1,3 @@
+program {
+  void main(integer n) { return; } // ERROR: 'main' must have no parameters
+}

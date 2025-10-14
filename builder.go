@@ -161,7 +161,7 @@ func (builder Builder) buildMethodDecl(n *sitter.Node) (*MethodDecl, error) {
 	for _, p := range params {
 		paramInfos = append(paramInfos, ParamInfo{Name: p.Name, Type: p.Type})
 	}
-	builder.symbolTable.Insert(name, Symbol{Type: t, isVar: false, Func: &FuncInfo{Return: t, Params: paramInfos, Arity: len(paramInfos)}})
+	builder.symbolTable.Insert(name, Symbol{Type: t, isVar: false, Func: &FuncInfo{Return: t, Params: paramInfos, Arity: len(paramInfos), DeclLine: nodeLine(n)}})
 
 	if len(params) > 0 {
 		paramNames := make(map[Identifier]struct{})

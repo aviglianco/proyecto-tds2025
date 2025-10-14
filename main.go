@@ -58,9 +58,9 @@ func main() {
 	}
 
 	ast, err := BuildAST(root, code)
-
 	if err != nil {
-		fmt.Printf("Coudldn't buil AST: %s", err.Error())
+		fmt.Fprintf(os.Stderr, "build error: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Run semantic analysis

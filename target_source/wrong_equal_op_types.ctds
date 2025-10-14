@@ -1,0 +1,5 @@
+program {
+  void main() {
+    bool ok = (1 == true); // ERROR
+  }
+}

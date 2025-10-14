@@ -1,0 +1,6 @@
+program {
+  void main() {
+    integer y = foo(1); // ERROR: 'foo' used before its declaration
+  }
+  integer foo(integer a) { return a; }
+}

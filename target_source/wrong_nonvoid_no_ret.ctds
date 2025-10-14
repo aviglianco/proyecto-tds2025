@@ -1,0 +1,7 @@
+program {
+  integer sign(integer x) {
+    if (x > 0) then { return 1; } else { ; }
+    // ERROR: non-void method reaches end without returning a value
+  }
+  void main() { return; }
+}

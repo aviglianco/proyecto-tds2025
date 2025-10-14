@@ -1,0 +1,3 @@
+program {
+  void helper() { return; }
+} // ERROR: no 'main' with zero parameters

@@ -1,0 +1,6 @@
+program {
+  void main() {
+    integer i = true; // ERROR
+    bool b = 0;       // ERROR
+  }
+}

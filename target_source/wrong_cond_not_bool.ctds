@@ -1,0 +1,6 @@
+program {
+  void main() {
+    if (1) then { ; } // ERROR: condition must be bool
+    while (0) { ; }   // ERROR: condition must be bool
+  }
+}

@@ -1,0 +1,7 @@
+program {
+  integer inc(integer x) { return x + 1; }
+  void main() {
+    integer inc = 5;      // shadows function 'inc' in this scope (legal)
+    integer y = inc(1);   // ERROR: here 'inc' is a variable, not a method
+  }
+}

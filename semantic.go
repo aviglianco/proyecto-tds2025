@@ -73,6 +73,24 @@ func Analyze(p *Program) error {
 		an.errorf(p, "program must declare a main method")
 	}
 
+	// Validate main signature: must exist, have zero parameters, and not be extern
+	{
+		mainFound := false
+		for _, m := range p.Methods {
+			if string(m.Name) == "main" {
+				mainFound = true
+				if len(m.Params) != 0 {
+					an.errorf(m, "main method must not have parameters")
+				}
+				if m.Extern {
+					an.errorf(m, "main method cannot be extern")
+				}
+				break
+			}
+		}
+		_ = mainFound
+	}
+
 	// Top-level variable declarations and their initializers are already in table from builder.
 	// Re-validate duplicates vs current frame and check initializers.
 	seenVars := make(map[Identifier]struct{})
@@ -115,10 +133,47 @@ func (an *Analyzer) analyzeMethod(m *MethodDecl) {
 
 	if m.Body != nil {
 		an.analyzeBlock(m.Body)
+		// If function is non-void, ensure all paths return.
+		if an.currentFun != nil && an.currentFun.Return != TypeVoid {
+			if !blockMustReturn(m.Body) {
+				an.errorf(m, "non-void function must return a value on all paths")
+			}
+		}
 	}
 
 	// restore
 	an.env = prev
+}
+
+// blockMustReturn conservatively checks whether a block guarantees a return on all paths.
+// It handles simple structured cases: sequence, if/else (both branches return), nested blocks.
+func blockMustReturn(b *Block) bool {
+	// Scan statements; a return anywhere ends the sequence path.
+	for i := 0; i < len(b.Stmts); i++ {
+		switch s := b.Stmts[i].(type) {
+		case *ReturnStmt:
+			return true
+		case *IfStmt:
+			thenR := false
+			elseR := false
+			if s.Then != nil {
+				thenR = blockMustReturn(s.Then)
+			}
+			if s.Else != nil {
+				elseR = blockMustReturn(s.Else)
+			}
+			// If both branches return, execution cannot continue past this if
+			if thenR && elseR {
+				return true
+			}
+			// otherwise, fallthrough and continue scanning subsequent statements
+		case *WhileStmt:
+			// We cannot assume while guarantees return; ignore
+		case *ExprStmt, *Assignment:
+			// no effect on return analysis
+		}
+	}
+	return false
 }
 
 func (an *Analyzer) analyzeBlock(b *Block) {
@@ -251,6 +306,10 @@ func (an *Analyzer) checkCallExpr(c *CallExpr, allowVoidCall bool) (TypeKind, bo
 		return 0, false
 	}
 	fi := sym.Func
+	// Enforce declaration-before-use for methods
+	if c.Line > 0 && fi.DeclLine > 0 && c.Line < fi.DeclLine {
+		an.errorf(c, "identifier used before declaration: %s", c.Callee)
+	}
 	if fi.Arity != len(fi.Params) { // internal consistency
 		fi.Arity = len(fi.Params)
 	}

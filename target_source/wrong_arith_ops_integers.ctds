@@ -1,0 +1,6 @@
+program {
+  void main() {
+    integer x = true + 1; // ERROR
+    bool b = (1 < false); // ERROR
+  }
+}

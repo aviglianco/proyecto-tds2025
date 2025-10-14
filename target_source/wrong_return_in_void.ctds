@@ -1,0 +1,6 @@
+program {
+  void reset() {
+    return 1; // ERROR: void return may not have an expression
+  }
+  void main() { return; }
+}
