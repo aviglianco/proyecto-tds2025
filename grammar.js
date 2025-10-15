@@ -1,5 +1,5 @@
 /**
- * @file Parser grammar for tree-sitter
+ * @file Parser grammar for tree-sitter (preprojectlang)
  * @author Agus
  * @license MIT
  */
@@ -7,8 +7,19 @@
 /// <reference types="tree-sitter-cli/dsl" />
 // @ts-check
 
-const commaSeparatedOptional = (rule) =>
-  optional(seq(repeat(seq(rule, ",")), rule));
+const commaSepTrailing = (rule) =>
+  optional(seq(rule, repeat(seq(",", rule)), optional(",")));
+
+// Operator precedence
+const PREC = {
+  UNARY: 7, // -x, !x
+  MUL: 6, // *, /, %
+  ADD: 5, // +, -
+  REL: 4, // <, >
+  EQ: 3, // ==
+  AND: 2, // &&
+  OR: 1, // ||
+};
 
 export default grammar({
   name: "preprojectlang",
@@ -17,11 +28,8 @@ export default grammar({
 
   rules: {
     // ────────────────────────────────────────────────────────────────────────────
-    // Entry points
+    // Entry point
     // ────────────────────────────────────────────────────────────────────────────
-    //source_file: ($) =>
-    //  choice(seq(choice($._void_type, $._int_type, $._bool_type), $.main)),
-
     source_file: ($) => $.program,
 
     program: ($) =>
@@ -32,14 +40,6 @@ export default grammar({
         repeat($.method_declaration_statement),
         "}"
       ),
-
-    main: ($) => seq("main", field("args", $.args), field("block", $.block)),
-
-    // ────────────────────────────────────────────────────────────────────────────
-    // Function arguments
-    // ────────────────────────────────────────────────────────────────────────────
-    arg: (_$) => "arg",
-    args: ($) => seq("(", optional(seq(repeat(seq($.arg, ",")), $.arg)), ")"),
 
     // ────────────────────────────────────────────────────────────────────────────
     // Types
@@ -61,7 +61,7 @@ export default grammar({
       ),
 
     method_call: ($) =>
-      seq($.identifier, "(", commaSeparatedOptional($._expression), ")"),
+      seq($.identifier, "(", commaSepTrailing($._expression), ")"),
 
     _statement: ($) =>
       choice(
@@ -74,13 +74,14 @@ export default grammar({
         $.block
       ),
 
-    while_statement: ($) => seq("while", "(", $._expression, ")", $.block),
+    while_statement: ($) =>
+      seq("while", field("condition", $._expression), $.block),
 
     if_statement: ($) =>
       seq(
         "if",
         "(",
-        $._expression,
+        field("condition", $._expression),
         ")",
         "then",
         $.block,
@@ -103,7 +104,9 @@ export default grammar({
       seq(
         field("type", choice($._type, $._void_type)),
         field("identifier", $.identifier),
-        seq("(", commaSeparatedOptional($.parameter), ")"),
+        "(",
+        commaSepTrailing($.parameter),
+        ")",
         choice($.block, seq("extern", ";"))
       ),
 
@@ -120,82 +123,105 @@ export default grammar({
     // ────────────────────────────────────────────────────────────────────────────
     // Expressions
     // ────────────────────────────────────────────────────────────────────────────
-    _expression: ($) => choice($._exp, seq("(", $._expression, ")")),
+    paren_expr: ($) => seq("(", $._expression, ")"),
+
+    _expression: ($) => choice($._exp, $.paren_expr),
 
     _exp: ($) =>
-      prec.left(
-        choice(
-          $._int_operation,
-          $._rel_operation,
-          $._bool_operation,
-          $.num,
-          $._bool_const,
-          $.identifier,
-          $.method_call,
-          $.minus,
-          $.bool_not
-          
-        )
+      choice(
+        // Unary (highest among operators)
+        $.minus,
+        $.bool_not,
+
+        // Binary operator groups (with explicit precedence)
+        $._int_operation,
+        $._rel_operation,
+        $._eq_operation,
+        $._bool_operation,
+
+        // Primaries
+        $.method_call, // before identifier to favor calls when "(" follows
+        $.identifier,
+        $.num,
+        $._bool_const
       ),
 
-    _rel_operation: ($) => choice($.rel_gt, $.rel_lt, $.rel_eq, $.int_rem),
+    // Equality (named node for the builder)
+    _eq_operation: ($) => $.rel_eq,
 
     rel_eq: ($) =>
       prec.left(
+        PREC.EQ,
         seq(field("left", $._expression), "==", field("right", $._expression))
       ),
 
+    // Relational (<, >) (named nodes for the builder)
+    _rel_operation: ($) => choice($.rel_lt, $.rel_gt),
+
     rel_lt: ($) =>
       prec.left(
+        PREC.REL,
         seq(field("left", $._expression), "<", field("right", $._expression))
       ),
 
     rel_gt: ($) =>
       prec.left(
+        PREC.REL,
         seq(field("left", $._expression), ">", field("right", $._expression))
       ),
 
+    // Boolean ops (OR lowest)
     _bool_operation: ($) => choice($.bool_conjunction, $.bool_disjunction),
 
     bool_conjunction: ($) =>
       prec.left(
+        PREC.AND,
         seq(field("left", $._expression), "&&", field("right", $._expression))
       ),
 
     bool_disjunction: ($) =>
       prec.left(
+        PREC.OR,
         seq(field("left", $._expression), "||", field("right", $._expression))
       ),
-    
-    bool_not: ($) => prec.right(2, seq("!", $._expression)),
 
-    _int_operation: ($) => choice($.int_prod, $.int_div, $.int_sum, $.int_sub),
+    bool_not: ($) => prec.right(PREC.UNARY, seq("!", $._expression)),
+
+    // Integer ops
+    _int_operation: ($) =>
+      choice($.int_prod, $.int_div, $.int_rem, $.int_sum, $.int_sub),
 
     int_prod: ($) =>
       prec.left(
-        1,
+        PREC.MUL,
         seq(field("left", $._expression), "*", field("right", $._expression))
       ),
+
     int_div: ($) =>
       prec.left(
-        1,
+        PREC.MUL,
         seq(field("left", $._expression), "/", field("right", $._expression))
       ),
-    int_sum: ($) =>
-      prec.left(
-        seq(field("left", $._expression), "+", field("right", $._expression))
-      ),
-    int_sub: ($) =>
-      prec.left(
-        seq(field("left", $._expression), "-", field("right", $._expression))
-      ),    
+
     int_rem: ($) =>
       prec.left(
+        PREC.MUL,
         seq(field("left", $._expression), "%", field("right", $._expression))
       ),
 
-    minus: ($) => prec.right(2, seq("-", $._expression)),
+    int_sum: ($) =>
+      prec.left(
+        PREC.ADD,
+        seq(field("left", $._expression), "+", field("right", $._expression))
+      ),
 
+    int_sub: ($) =>
+      prec.left(
+        PREC.ADD,
+        seq(field("left", $._expression), "-", field("right", $._expression))
+      ),
+
+    minus: ($) => prec.right(PREC.UNARY, seq("-", $._expression)),
 
     // ────────────────────────────────────────────────────────────────────────────
     // Terminals

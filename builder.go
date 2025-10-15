@@ -384,11 +384,18 @@ func (builder Builder) buildExpr(n *sitter.Node) (Expr, error) {
 		"rel_eq", "rel_lt", "rel_gt",
 		"bool_conjunction", "bool_disjunction", "int_rem":
 		return builder.buildBinaryExpr(n)
-	case "minus", "bool_not": // if you decide to name it so
+	case "minus", "bool_not":
 		return builder.buildUnaryExpr(n)
-	case "(": // parenthesized
+	case "paren_expr":
 		inner := n.NamedChild(0)
-		return &ParenExpr{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Inner: builder.mustExpr(inner)}, nil
+		e, err := builder.buildExpr(inner)
+		if err != nil {
+			return nil, err
+		}
+		return &ParenExpr{
+			NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)},
+			Inner:    e,
+		}, nil
 	}
 	return nil, builderErrorf(n, "unhandled expression node type: %s", n.Kind())
 }
@@ -465,7 +472,6 @@ func (builder Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 }
 
 func (builder Builder) buildUnaryExpr(n *sitter.Node) (Expr, error) {
-	// depending on how you labelled it; grammar has "-" $._expression and "!" $._expression
 	opNode := n.Child(0)
 	exprNode := n.Child(1)
 	expr, err := builder.buildExpr(exprNode)
@@ -485,9 +491,4 @@ func (builder Builder) buildUnaryExpr(n *sitter.Node) (Expr, error) {
 		return nil, builderErrorf(n, "unknown unary op: %s", text(opNode, builder.src))
 	}
 	return &UnaryExpr{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Op: op, Expr: expr, Type: t}, nil
-}
-
-func (builder Builder) mustExpr(n *sitter.Node) Expr {
-	e, _ := builder.buildExpr(n)
-	return e
 }

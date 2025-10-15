@@ -378,7 +378,7 @@ func (an *Analyzer) checkBinary(b *BinaryExpr) (TypeKind, bool) {
 	lt, _ := an.checkExpr(b.Left, false)
 	rt, _ := an.checkExpr(b.Right, false)
 	switch b.Op {
-	case BinAdd, BinSub, BinMul, BinDiv:
+	case BinAdd, BinSub, BinMul, BinDiv, BinRem:
 		if lt != TypeInteger || rt != TypeInteger {
 			an.errorf(b, "arithmetic operands must be integer")
 		}
