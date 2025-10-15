@@ -52,8 +52,24 @@ func main() {
 	root := tree.RootNode()
 
 	if root.HasError() {
-		fmt.Fprintf(os.Stderr, "could not parse file %s: syntax error\n", inputArg)
-
+		// Try to find the first erroneous node to report line/col
+		// Tree-sitter marks error nodes; walk children of root to find a node with HasError or kind "ERROR"
+		// Fallback to root position if not found.
+		errLine := int(root.Range().StartPoint.Row) + 1
+		errCol := int(root.Range().StartPoint.Column) + 1
+		// attempt a shallow scan for a better location
+		for i := uint(0); i < root.ChildCount(); i++ {
+			c := root.Child(i)
+			if c == nil {
+				continue
+			}
+			if c.HasError() || c.Kind() == "ERROR" {
+				errLine = int(c.Range().StartPoint.Row) + 1
+				errCol = int(c.Range().StartPoint.Column) + 1
+				break
+			}
+		}
+		fmt.Fprintf(os.Stderr, "syntax error at %s:%d:%d\n", inputArg, errLine, errCol)
 		os.Exit(1)
 	}
 

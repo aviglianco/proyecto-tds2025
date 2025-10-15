@@ -14,42 +14,63 @@ type Analyzer struct {
 // errorf records a semantic error with line information when available.
 func (an *Analyzer) errorf(n interface{}, format string, a ...interface{}) {
 	line := 0
+	col := 0
 	switch node := n.(type) {
 	case *Program:
 		line = node.Line
+		col = node.Col
 	case *VarDecl:
 		line = node.Line
+		col = node.Col
 	case *MethodDecl:
 		line = node.Line
+		col = node.Col
 	case *Block:
 		line = node.Line
+		col = node.Col
 	case *Assignment:
 		line = node.Line
+		col = node.Col
 	case *ReturnStmt:
 		line = node.Line
+		col = node.Col
 	case *IfStmt:
 		line = node.Line
+		col = node.Col
 	case *WhileStmt:
 		line = node.Line
+		col = node.Col
 	case *ExprStmt:
 		line = node.Line
+		col = node.Col
 	case *IntLiteral:
 		line = node.Line
+		col = node.Col
 	case *BoolLiteral:
 		line = node.Line
+		col = node.Col
 	case *IdentExpr:
 		line = node.Line
+		col = node.Col
 	case *UnaryExpr:
 		line = node.Line
+		col = node.Col
 	case *BinaryExpr:
 		line = node.Line
+		col = node.Col
 	case *CallExpr:
 		line = node.Line
+		col = node.Col
 	case *ParenExpr:
 		line = node.Line
+		col = node.Col
 	}
 	if line > 0 {
-		an.errors = append(an.errors, fmt.Errorf("line %d: "+format, append([]interface{}{line}, a...)...))
+		if col > 0 {
+			an.errors = append(an.errors, fmt.Errorf("line %d, col %d: "+format, append([]interface{}{line, col}, a...)...))
+		} else {
+			an.errors = append(an.errors, fmt.Errorf("line %d: "+format, append([]interface{}{line}, a...)...))
+		}
 	} else {
 		an.errors = append(an.errors, fmt.Errorf(format, a...))
 	}

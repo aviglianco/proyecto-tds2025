@@ -301,6 +301,7 @@ func (n *ParenExpr) isExpr()          {}
 // NodeBase contains fields common to all AST nodes.
 type NodeBase struct {
 	Line int // 1-based line number of the starting token for this node
+	Col  int // 1-based column number of the starting token for this node
 }
 
 // LineNumber exposes the line for nodes embedding NodeBase.
