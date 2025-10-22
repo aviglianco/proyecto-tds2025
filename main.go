@@ -21,7 +21,8 @@ func main() {
 	// Set the language on the parser
 	e := parser.SetLanguage(lang)
 	if e != nil {
-		panic(fmt.Errorf("couldn't configure parser: %w", e))
+		fmt.Fprintf(os.Stderr, "parser configuration error: %v\n", e)
+		os.Exit(1)
 	}
 
 	if len(os.Args) < 2 {
@@ -73,6 +74,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Generate AST
 	ast, err := BuildAST(root, code)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build error: %v\n", err)
@@ -87,6 +89,15 @@ func main() {
 		}
 	}
 
+	// Generate IR (three address code), validate, and write alongside other outputs
+	m, err := GenerateIR(ast)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ir error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// OUTPUT PREPARATION
+
 	// Prepare result directory and base filename
 	base := inputArg[:len(inputArg)-len(filepath.Ext(inputArg))]
 	baseName := filepath.Base(base)
@@ -95,6 +106,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error creating results directory: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Pretty-print the syntax tree and write to .sint file in result folder
+	output := []byte(root.ToSexp())
+	outputPath := filepath.Join(resultsDir, baseName+".sint")
+	if err := os.WriteFile(outputPath, output, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("SINTAX TREE written to:", outputPath)
 
 	// Write AST (semantic stage) to .sem file in result folder
 	semPath := filepath.Join(resultsDir, baseName+".sem")
@@ -106,13 +126,11 @@ func main() {
 		fmt.Println("AST written to:", semPath)
 	}
 
-	// Pretty-print the syntax tree and write to .sint file in result folder
-	output := []byte(root.ToSexp())
-	outputPath := filepath.Join(resultsDir, baseName+".sint")
-	if err := os.WriteFile(outputPath, output, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
+	// Write IR to .ci file in result folder
+	ciPath := filepath.Join(resultsDir, baseName+".ci")
+	if err := os.WriteFile(ciPath, []byte(m.String()), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing IR output: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Println("Output written to:", outputPath)
+	fmt.Println("IR written to:", ciPath)
 }
