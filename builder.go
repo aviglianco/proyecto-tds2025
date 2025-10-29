@@ -7,12 +7,13 @@ import (
 )
 
 type Builder struct {
-	symbolTable Env
-	src         []byte
+	symbolTable   Env
+	src           []byte
+	currentOffset int
 }
 
 // builderErrorf creates an error message annotated with the line and column
-func builderErrorf(n *sitter.Node, format string, a ...interface{}) error {
+func builderErrorf(n *sitter.Node, format string, a ...any) error {
 	if n != nil {
 		return fmt.Errorf("line %d, col %d: "+format, append([]interface{}{nodeLine(n), nodeCol(n)}, a...)...)
 	}
@@ -102,6 +103,15 @@ func (builder Builder) buildProgram(n *sitter.Node) (*Program, error) {
 	// expose built symbol table at program level
 	p.Symbols = builder.symbolTable
 	return p, nil
+}
+
+func (builder Builder) getNewOffset() int {
+	builder.currentOffset += 1
+	return builder.currentOffset
+}
+
+func (builder Builder) resetOffset() {
+	builder.currentOffset = 0
 }
 
 func (builder Builder) buildVarDecl(n *sitter.Node) (*VarDecl, error) {

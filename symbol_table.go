@@ -18,9 +18,10 @@ type FuncInfo struct {
 }
 
 type Symbol struct {
-	Type  TypeKind
-	isVar bool
-	Func  *FuncInfo
+	Type   TypeKind
+	isVar  bool
+	Func   *FuncInfo
+	Offset int
 }
 
 type Table map[Identifier]Symbol
