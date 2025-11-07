@@ -130,7 +130,7 @@ func (builder *Builder) buildVarDecl(n *sitter.Node) (*VarDecl, error) {
 	if ok {
 		return nil, builderErrorf(n, "cannot double declare :%s", name)
 	} else {
-		builder.symbolTable.Insert(name, Symbol{Type: t, isVar: true, Offset: builder.getNewOffset()})
+		builder.symbolTable.Insert(name, Symbol{Type: t, VarKind: LocalVar, Offset: builder.getNewOffset()})
 	}
 
 	if err != nil {
@@ -187,7 +187,7 @@ func (builder *Builder) buildMethodDecl(n *sitter.Node) (*MethodDecl, error) {
 	for _, p := range params {
 		paramInfos = append(paramInfos, ParamInfo{Name: p.Name, Type: p.Type})
 	}
-	builder.symbolTable.Insert(name, Symbol{Type: t, isVar: false, Func: &FuncInfo{Return: t, Params: paramInfos, Arity: len(paramInfos), DeclLine: nodeLine(n)}, Offset: builder.getNewOffset()})
+	builder.symbolTable.Insert(name, Symbol{Type: t, VarKind: Method, Func: &FuncInfo{Return: t, Params: paramInfos, Arity: len(paramInfos), DeclLine: nodeLine(n)}, Offset: builder.getNewOffset()})
 	prevEnv := builder.symbolTable
 
 	if len(params) > 0 {
@@ -201,7 +201,7 @@ func (builder *Builder) buildMethodDecl(n *sitter.Node) (*MethodDecl, error) {
 
 		funcEnv := Env{Prev: &prevEnv, Table: make(Table)}
 		for _, p := range params {
-			funcEnv.Insert(p.Name, Symbol{Type: p.Type, isVar: true, Offset: builder.getNewOffset()})
+			funcEnv.Insert(p.Name, Symbol{Type: p.Type, VarKind: LocalVar, Offset: builder.getNewOffset()})
 		}
 		builder.symbolTable = funcEnv
 	}
@@ -224,6 +224,9 @@ func (builder *Builder) buildMethodDecl(n *sitter.Node) (*MethodDecl, error) {
 	}
 
 	builder.symbolTable = prevEnv
+
+	builder.resetOffset()
+
 	return &MethodDecl{
 		NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)},
 		Return:   t,

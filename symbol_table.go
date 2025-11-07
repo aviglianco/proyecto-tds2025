@@ -1,5 +1,14 @@
 package main
 
+type VarKind uint
+
+const (
+	LocalVar VarKind = iota
+	Param
+	GlobalVar
+	Method
+)
+
 type Env struct {
 	Table Table
 	Prev  *Env
@@ -18,10 +27,10 @@ type FuncInfo struct {
 }
 
 type Symbol struct {
-	Type   TypeKind
-	isVar  bool
-	Func   *FuncInfo
-	Offset int
+	Type    TypeKind
+	VarKind VarKind
+	Func    *FuncInfo
+	Offset  int
 }
 
 type Table map[Identifier]Symbol
@@ -41,7 +50,7 @@ func (env Env) Lookup(name Identifier) (Symbol, bool) {
 			break
 		}
 	}
-	return Symbol{Type: 0, isVar: true}, false
+	return Symbol{}, false
 }
 
 func (env Env) Insert(name Identifier, symbol Symbol) {

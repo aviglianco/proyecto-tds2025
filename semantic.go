@@ -149,7 +149,7 @@ func (an *Analyzer) analyzeMethod(m *MethodDecl) {
 			an.errors = append(an.errors, fmt.Errorf("duplicate parameter name: %s", prm.Name))
 			continue
 		}
-		an.env.Insert(prm.Name, Symbol{Type: prm.Type, isVar: true})
+		an.env.Insert(prm.Name, Symbol{Type: prm.Type, VarKind: Param})
 	}
 
 	if m.Body != nil {
@@ -205,7 +205,7 @@ func (an *Analyzer) analyzeBlock(b *Block) {
 		if _, exists := an.env.Table[d.Name]; exists {
 			an.errorf(d, "duplicate declaration in same scope: %s", d.Name)
 		} else {
-			an.env.Insert(d.Name, Symbol{Type: d.Type, isVar: true})
+			an.env.Insert(d.Name, Symbol{Type: d.Type, VarKind: LocalVar})
 		}
 		if d.Value != nil {
 			t, ok := an.checkExpr(d.Value, false)
@@ -235,7 +235,7 @@ func (an *Analyzer) analyzeBlock(b *Block) {
 
 func (an *Analyzer) checkAssignment(a *Assignment) {
 	sym, ok := an.env.Lookup(a.Target)
-	if !ok || !sym.isVar {
+	if !ok || (sym.VarKind == Param || sym.VarKind == Method) {
 		an.errorf(a, "assignment to undeclared identifier: %s", a.Target)
 		return
 	}

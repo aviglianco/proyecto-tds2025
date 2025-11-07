@@ -57,9 +57,10 @@ func (id Identifier) String() string   { return string(id) }
 //	<type> <identifier> = <expression> ;
 type VarDecl struct {
 	NodeBase
-	Type  TypeKind
-	Name  Identifier
-	Value Expr
+	Type   TypeKind
+	Name   Identifier
+	Value  Expr
+	Offset int
 }
 
 func (d *VarDecl) NodeType() string { return "VarDecl" }
@@ -267,10 +268,11 @@ func (op BinOp) String() string {
 
 type BinaryExpr struct {
 	NodeBase
-	Left  Expr
-	Op    BinOp
-	Right Expr
-	Type  TypeKind
+	Left   Expr
+	Op     BinOp
+	Right  Expr
+	Type   TypeKind
+	Offset int
 }
 
 func (n *BinaryExpr) NodeType() string { return "BinaryExpr" }
