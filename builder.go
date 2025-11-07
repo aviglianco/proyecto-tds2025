@@ -86,7 +86,7 @@ func (builder *Builder) buildProgram(n *sitter.Node) (*Program, error) {
 		}
 		switch c.Kind() {
 		case "declaration_statement":
-			decl, err := builder.buildVarDecl(c)
+			decl, err := builder.buildGlobalVarDecl(c)
 			if err != nil {
 				return nil, err
 			}
@@ -114,7 +114,7 @@ func (builder *Builder) resetOffset() {
 	builder.currentOffset = 0
 }
 
-func (builder *Builder) buildVarDecl(n *sitter.Node) (*VarDecl, error) {
+func (builder *Builder) buildLocalVarDecl(n *sitter.Node) (*VarDecl, error) {
 	typNode := n.ChildByFieldName("type")
 	idNode := n.ChildByFieldName("identifier")
 	valNode := n.ChildByFieldName("value")
@@ -131,6 +131,31 @@ func (builder *Builder) buildVarDecl(n *sitter.Node) (*VarDecl, error) {
 		return nil, builderErrorf(n, "cannot double declare :%s", name)
 	} else {
 		builder.symbolTable.Insert(name, Symbol{Type: t, VarKind: LocalVar, Offset: builder.getNewOffset()})
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return &VarDecl{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Type: t, Name: name, Value: val}, nil
+}
+
+func (builder *Builder) buildGlobalVarDecl(n *sitter.Node) (*VarDecl, error) {
+	typNode := n.ChildByFieldName("type")
+	idNode := n.ChildByFieldName("identifier")
+	valNode := n.ChildByFieldName("value")
+
+	t, err := builder.buildType(typNode)
+	if err != nil {
+		return nil, err
+	}
+	name := Identifier(text(idNode, builder.src))
+	val, err := builder.buildExpr(valNode)
+
+	_, ok := builder.symbolTable.Table[name]
+	if ok {
+		return nil, builderErrorf(n, "cannot double declare :%s", name)
+	} else {
+		builder.symbolTable.Insert(name, Symbol{Type: t, VarKind: GlobalVar, Offset: builder.getNewOffset()})
 	}
 
 	if err != nil {
@@ -261,7 +286,7 @@ func (builder *Builder) buildBlock(n *sitter.Node) (*Block, error) {
 		c := n.NamedChild(i)
 		switch c.Kind() {
 		case "declaration_statement":
-			d, err := builder.buildVarDecl(c)
+			d, err := builder.buildLocalVarDecl(c)
 			if err != nil {
 				return nil, err
 			}
