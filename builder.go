@@ -1,7 +1,9 @@
 package main
 
 import (
+	ir "compilador/ir"
 	"fmt"
+	"slices"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
@@ -130,7 +132,17 @@ func (builder *Builder) buildLocalVarDecl(n *sitter.Node) (*VarDecl, error) {
 	if ok {
 		return nil, builderErrorf(n, "cannot double declare :%s", name)
 	} else {
-		builder.symbolTable.Insert(name, Symbol{Type: t, VarKind: LocalVar, Offset: builder.getNewOffset()})
+		builder.symbolTable.Insert(
+			name,
+			Symbol{
+				Type:    t,
+				VarKind: LocalVar,
+				Address: ir.Addr{
+					Kind:  ir.Offset,
+					Value: builder.getNewOffset(),
+				},
+			},
+		)
 	}
 
 	if err != nil {
@@ -155,7 +167,17 @@ func (builder *Builder) buildGlobalVarDecl(n *sitter.Node) (*VarDecl, error) {
 	if ok {
 		return nil, builderErrorf(n, "cannot double declare :%s", name)
 	} else {
-		builder.symbolTable.Insert(name, Symbol{Type: t, VarKind: GlobalVar, Offset: builder.getNewOffset()})
+		builder.symbolTable.Insert(
+			name,
+			Symbol{
+				Type:    t,
+				VarKind: GlobalVar,
+				Address: ir.Addr{
+					Kind:  ir.Global,
+					Value: builder.getNewOffset(),
+				},
+			},
+		)
 	}
 
 	if err != nil {
@@ -212,7 +234,7 @@ func (builder *Builder) buildMethodDecl(n *sitter.Node) (*MethodDecl, error) {
 	for _, p := range params {
 		paramInfos = append(paramInfos, ParamInfo{Name: p.Name, Type: p.Type})
 	}
-	builder.symbolTable.Insert(name, Symbol{Type: t, VarKind: Method, Func: &FuncInfo{Return: t, Params: paramInfos, Arity: len(paramInfos), DeclLine: nodeLine(n)}, Offset: builder.getNewOffset()})
+	builder.symbolTable.Insert(name, Symbol{Type: t, VarKind: Method, Func: &FuncInfo{Return: t, Params: paramInfos, Arity: len(paramInfos), DeclLine: nodeLine(n)}})
 	prevEnv := builder.symbolTable
 
 	if len(params) > 0 {
@@ -226,7 +248,14 @@ func (builder *Builder) buildMethodDecl(n *sitter.Node) (*MethodDecl, error) {
 
 		funcEnv := Env{Prev: &prevEnv, Table: make(Table)}
 		for _, p := range params {
-			funcEnv.Insert(p.Name, Symbol{Type: p.Type, VarKind: LocalVar, Offset: builder.getNewOffset()})
+			funcEnv.Insert(
+				p.Name,
+				Symbol{Type: p.Type, VarKind: LocalVar,
+					Address: ir.Addr{
+						Kind:  ir.Offset,
+						Value: builder.getNewOffset(),
+					},
+				})
 		}
 		builder.symbolTable = funcEnv
 	}
@@ -335,7 +364,28 @@ func (builder *Builder) buildAssignment(n *sitter.Node) (*Assignment, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Assignment{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Target: Identifier(text(idNode, builder.src)), Value: val}, nil
+
+	name := Identifier(text(idNode, builder.src))
+	symbol, ok := builder.symbolTable.Lookup(name)
+
+	if !ok {
+		return nil, fmt.Errorf("undefined identifier %s", name)
+	}
+
+	ir_code := slices.Concat(
+		val.getCode(),
+		[]ir.Instr{
+			ir.Instr{
+				Op: ir.OpCopy,
+				D:  symbol.Address,
+				A:  val.getAddress(),
+			},
+		},
+	)
+
+	return &Assignment{NodeBase: NodeBase{
+		Code: ir_code,
+		Line: nodeLine(n), Col: nodeCol(n)}, Target: Identifier(text(idNode, builder.src)), Value: val}, nil
 }
 
 func (builder *Builder) buildReturnStmt(n *sitter.Node) (*ReturnStmt, error) {

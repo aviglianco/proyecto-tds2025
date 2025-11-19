@@ -9,6 +9,7 @@ import (
 type Node interface {
 	// optionally add Pos/Span methods here later
 	NodeType() string
+	getCode() []ir.Instr
 }
 
 // ===== Program / Top-level =====
@@ -105,8 +106,9 @@ type Block struct {
 	Stmts        []Stmt
 }
 
-func (b *Block) NodeType() string { return "Block" }
-func (b *Block) isStmt()          {}
+func (n *Block) getCode() []ir.Instr { return n.Code }
+func (b *Block) NodeType() string    { return "Block" }
+func (b *Block) isStmt()             {}
 
 type Assignment struct {
 	NodeBase
@@ -114,16 +116,24 @@ type Assignment struct {
 	Value  Expr       // field("value", $._expression)
 }
 
-func (a *Assignment) NodeType() string { return "Assignment" }
-func (a *Assignment) isStmt()          {}
+func (n *Assignment) getCode() []ir.Instr { return n.Code }
+func (a *Assignment) NodeType() string    { return "Assignment" }
+func (a *Assignment) isStmt()             {}
+
+// base struct for expressions
+type ExprBase struct {
+	Address ir.Addr
+}
 
 type ExprStmt struct {
 	NodeBase
 	Expr Expr // used for method_call followed by ';' or any expression statement
+	ExprBase
 }
 
-func (e *ExprStmt) NodeType() string { return "ExprStmt" }
-func (e *ExprStmt) isStmt()          {}
+func (n *ExprStmt) getCode() []ir.Instr { return n.Code }
+func (e *ExprStmt) NodeType() string    { return "ExprStmt" }
+func (e *ExprStmt) isStmt()             {}
 
 // ReturnStmt corresponds to `return` optional expression + ';'
 type ReturnStmt struct {
@@ -131,8 +141,9 @@ type ReturnStmt struct {
 	Value Expr // nil if no value
 }
 
-func (r *ReturnStmt) NodeType() string { return "ReturnStmt" }
-func (r *ReturnStmt) isStmt()          {}
+func (n *ReturnStmt) getCode() []ir.Instr { return n.Code }
+func (r *ReturnStmt) NodeType() string    { return "ReturnStmt" }
+func (r *ReturnStmt) isStmt()             {}
 
 type IfStmt struct {
 	NodeBase
@@ -141,8 +152,9 @@ type IfStmt struct {
 	Else *Block // nil if absent
 }
 
-func (i *IfStmt) NodeType() string { return "IfStmt" }
-func (i *IfStmt) isStmt()          {}
+func (n *IfStmt) getCode() []ir.Instr { return n.Code }
+func (i *IfStmt) NodeType() string    { return "IfStmt" }
+func (i *IfStmt) isStmt()             {}
 
 type WhileStmt struct {
 	NodeBase
@@ -150,19 +162,15 @@ type WhileStmt struct {
 	Body *Block
 }
 
-func (w *WhileStmt) NodeType() string { return "WhileStmt" }
-func (w *WhileStmt) isStmt()          {}
-
-// VarDecl can be stored in Block.Declarations and top-level Program.Declarations.
-// If you want a single AST node type for declaration statements (rather than a dedicated VarDecl),
-// the above structure already models it directly.
+func (n *WhileStmt) getCode() []ir.Instr { return n.Code }
+func (w *WhileStmt) NodeType() string    { return "WhileStmt" }
+func (w *WhileStmt) isStmt()             {}
 
 // ===== Expressions =====
 
 type Expr interface {
 	Node
 	isExpr()
-	getCode() []ir.Instr
 	getAddress() ir.Addr
 }
 
@@ -170,28 +178,37 @@ type IntLiteral struct {
 	NodeBase
 	Value int
 	Type  TypeKind
+	ExprBase
 }
 
-func (n *IntLiteral) NodeType() string { return "IntLiteral" }
-func (n *IntLiteral) isExpr()          {}
+func (n *IntLiteral) getAddress() ir.Addr { return n.Address }
+func (n *IntLiteral) getCode() []ir.Instr { return n.Code }
+func (n *IntLiteral) NodeType() string    { return "IntLiteral" }
+func (n *IntLiteral) isExpr()             {}
 
 type BoolLiteral struct {
 	NodeBase
 	Value bool
 	Type  TypeKind
+	ExprBase
 }
 
-func (n *BoolLiteral) NodeType() string { return "BoolLiteral" }
-func (n *BoolLiteral) isExpr()          {}
+func (n *BoolLiteral) getAddress() ir.Addr { return n.Address }
+func (n *BoolLiteral) getCode() []ir.Instr { return n.Code }
+func (n *BoolLiteral) NodeType() string    { return "BoolLiteral" }
+func (n *BoolLiteral) isExpr()             {}
 
 type IdentExpr struct {
 	NodeBase
 	Name Identifier
 	Type TypeKind
+	ExprBase
 }
 
-func (n *IdentExpr) NodeType() string { return "IdentExpr" }
-func (n *IdentExpr) isExpr()          {}
+func (n *IdentExpr) getAddress() ir.Addr { return n.Address }
+func (n *IdentExpr) getCode() []ir.Instr { return n.Code }
+func (n *IdentExpr) NodeType() string    { return "IdentExpr" }
+func (n *IdentExpr) isExpr()             {}
 
 // Unary operator kinds (for '-' and '!')
 type UnaryOp int
@@ -217,10 +234,13 @@ type UnaryExpr struct {
 	Op   UnaryOp
 	Expr Expr
 	Type TypeKind
+	ExprBase
 }
 
-func (n *UnaryExpr) NodeType() string { return "UnaryExpr" }
-func (n *UnaryExpr) isExpr()          {}
+func (n *UnaryExpr) getAddress() ir.Addr { return n.Address }
+func (n *UnaryExpr) getCode() []ir.Instr { return n.Code }
+func (n *UnaryExpr) NodeType() string    { return "UnaryExpr" }
+func (n *UnaryExpr) isExpr()             {}
 
 // Binary operators (covers int ops, relational ops, boolean ops)
 type BinOp int
@@ -272,15 +292,17 @@ func (op BinOp) String() string {
 
 type BinaryExpr struct {
 	NodeBase
-	Left    Expr
-	Op      BinOp
-	Right   Expr
-	Type    TypeKind
-	Address int
+	Left  Expr
+	Op    BinOp
+	Right Expr
+	Type  TypeKind
+	ExprBase
 }
 
-func (n *BinaryExpr) NodeType() string { return "BinaryExpr" }
-func (n *BinaryExpr) isExpr()          {}
+func (n *BinaryExpr) getAddress() ir.Addr { return n.Address }
+func (n *BinaryExpr) getCode() []ir.Instr { return n.Code }
+func (n *BinaryExpr) NodeType() string    { return "BinaryExpr" }
+func (n *BinaryExpr) isExpr()             {}
 
 // CallExpr / Method call: identifier "(" args... ")"
 type CallExpr struct {
@@ -288,19 +310,25 @@ type CallExpr struct {
 	Callee Identifier
 	Args   []Expr
 	Type   TypeKind
+	ExprBase
 }
 
-func (n *CallExpr) NodeType() string { return "CallExpr" }
-func (n *CallExpr) isExpr()          {}
+func (n *CallExpr) getAddress() ir.Addr { return n.Address }
+func (n *CallExpr) getCode() []ir.Instr { return n.Code }
+func (n *CallExpr) NodeType() string    { return "CallExpr" }
+func (n *CallExpr) isExpr()             {}
 
 // Parenthesized expression (explicit in grammar as "(" _expression ")")
 type ParenExpr struct {
 	NodeBase
 	Inner Expr
+	ExprBase
 }
 
-func (n *ParenExpr) NodeType() string { return "ParenExpr" }
-func (n *ParenExpr) isExpr()          {}
+func (n *ParenExpr) getAddress() ir.Addr { return n.Address }
+func (n *ParenExpr) getCode() []ir.Instr { return n.Code }
+func (n *ParenExpr) NodeType() string    { return "ParenExpr" }
+func (n *ParenExpr) isExpr()             {}
 
 // ===== Helpers (optional) =====
 

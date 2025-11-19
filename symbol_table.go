@@ -1,5 +1,7 @@
 package main
 
+import "compilador/ir"
+
 type VarKind uint
 
 const (
@@ -30,7 +32,7 @@ type Symbol struct {
 	Type    TypeKind
 	VarKind VarKind
 	Func    *FuncInfo
-	Offset  int
+	Address ir.Addr
 }
 
 type Table map[Identifier]Symbol
