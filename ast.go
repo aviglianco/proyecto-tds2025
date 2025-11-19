@@ -1,6 +1,9 @@
 package main
 
-import "strconv"
+import (
+	"compilador/ir"
+	"strconv"
+)
 
 // Node is the common interface implemented by all AST nodes.
 type Node interface {
@@ -57,10 +60,9 @@ func (id Identifier) String() string   { return string(id) }
 //	<type> <identifier> = <expression> ;
 type VarDecl struct {
 	NodeBase
-	Type   TypeKind
-	Name   Identifier
-	Value  Expr
-	Offset int
+	Type  TypeKind
+	Name  Identifier
+	Value Expr
 }
 
 func (d *VarDecl) NodeType() string { return "VarDecl" }
@@ -160,6 +162,8 @@ func (w *WhileStmt) isStmt()          {}
 type Expr interface {
 	Node
 	isExpr()
+	getCode() []ir.Instr
+	getAddress() ir.Addr
 }
 
 type IntLiteral struct {
@@ -268,11 +272,11 @@ func (op BinOp) String() string {
 
 type BinaryExpr struct {
 	NodeBase
-	Left   Expr
-	Op     BinOp
-	Right  Expr
-	Type   TypeKind
-	Offset int
+	Left    Expr
+	Op      BinOp
+	Right   Expr
+	Type    TypeKind
+	Address int
 }
 
 func (n *BinaryExpr) NodeType() string { return "BinaryExpr" }
@@ -304,6 +308,7 @@ func (n *ParenExpr) isExpr()          {}
 type NodeBase struct {
 	Line int // 1-based line number of the starting token for this node
 	Col  int // 1-based column number of the starting token for this node
+	Code []ir.Instr
 }
 
 // LineNumber exposes the line for nodes embedding NodeBase.

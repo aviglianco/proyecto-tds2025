@@ -1,6 +1,9 @@
 package ir
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 func (m *Module) String() string {
 	var b strings.Builder
@@ -33,7 +36,8 @@ func (f *Function) String() string {
 		for _, ins := range blk.Instrs {
 			line := ins.Format()
 			if line == "" {
-				continue}
+				continue
+			}
 			b.WriteString("  ")
 			b.WriteString(line)
 			b.WriteByte('\n')
@@ -42,50 +46,63 @@ func (f *Function) String() string {
 	return b.String()
 }
 
+func (i Instr) FormatUnary() string {
+
+	switch i.Op {
+	case OpNot:
+		return i.D.String() + " = !" + i.A.String()
+	case OpCopy:
+		return "copy " + i.D.String() + ", " + i.A.String()
+	default:
+		panic(fmt.Sprintf("not a unary operation %s", i.Op.String()))
+	}
+
+}
+
 func (i Instr) Format() string {
+
+	if i.Op.isUnary() {
+		return i.FormatUnary()
+	}
+
 	switch i.Op {
 	case OpAdd:
-		return i.D + " = (" + i.A + " + " + i.B + ")"
+		return i.D.String() + " = (" + i.A.String() + " + " + i.B.String() + ")"
 	case OpSub:
-		return i.D + " = (" + i.A + " - " + i.B + ")"
+		return i.D.String() + " = (" + i.A.String() + " - " + i.B.String() + ")"
 	case OpMul:
-		return i.D + " = (" + i.A + " * " + i.B + ")"
+		return i.D.String() + " = (" + i.A.String() + " * " + i.B.String() + ")"
 	case OpDiv:
-		return i.D + " = (" + i.A + " / " + i.B + ")"
+		return i.D.String() + " = (" + i.A.String() + " / " + i.B.String() + ")"
 	case OpRem:
-		return i.D + " = (" + i.A + " % " + i.B + ")"
+		return i.D.String() + " = (" + i.A.String() + " % " + i.B.String() + ")"
 
 	case OpLT:
-		return i.D + " = (" + i.A + " < " + i.B + ")"
+		return i.D.String() + " = (" + i.A.String() + " < " + i.B.String() + ")"
 	case OpGT:
-		return i.D + " = (" + i.A + " > " + i.B + ")"
+		return i.D.String() + " = (" + i.A.String() + " > " + i.B.String() + ")"
 	case OpEQ:
-		return i.D + " = (" + i.A + " == " + i.B + ")"
-
-	case OpNot:
-		return i.D + " = !" + i.A
-	case OpCopy:
-		return "copy " + i.D + ", " + i.A
+		return i.D.String() + " = (" + i.A.String() + " == " + i.B.String() + ")"
 
 	case OpIfZ:
-		return "ifz " + i.A + " -> " + i.S
+		return "ifz " + i.A.String() + " -> " + i.S.String()
 	case OpGoto:
-		return "goto " + i.S
+		return "goto " + i.S.String()
 	case OpLabel:
-		return i.S + ":"
+		return i.S.String() + ":"
 
 	case OpParam:
-		return "param " + i.A
+		return "param " + i.A.String()
 	case OpCall:
-		if i.D != "" {
-			return i.D + " = call " + i.S + ", " + itoa(i.K)
+		if i.D.String() != "" {
+			return i.D.String() + " = call " + i.S.String() + ", " + itoa(i.K)
 		}
-		return "call " + i.S + ", " + itoa(i.K)
+		return "call " + i.S.String() + ", " + itoa(i.K)
 
 	case OpRet:
 		return "ret"
 	case OpRetV:
-		return "ret " + i.D
+		return "ret " + i.D.String()
 	default:
 		return ""
 	}

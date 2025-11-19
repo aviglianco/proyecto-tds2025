@@ -1,5 +1,7 @@
 package ir
 
+import "fmt"
+
 type Op int
 
 const (
@@ -31,13 +33,70 @@ const (
 	OpRetV
 )
 
+var opNames = []string{
+	"OpAdd",
+	"OpSub",
+	"OpMul",
+	"OpDiv",
+	"OpRem",
+	"OpLT",
+	"OpGT",
+	"OpEQ",
+	"OpNot",
+	"OpCopy",
+	"OpIfZ",
+	"OpGoto",
+	"OpLabel",
+	"OpParam",
+	"OpCall",
+	"OpRet",
+	"OpRetV",
+}
+
+func (o Op) String() string {
+	if int(o) < len(opNames) {
+		return opNames[o]
+	}
+	return fmt.Sprintf("Op(%d)", int(o))
+}
+
+func (op Op) isUnary() bool {
+	return op == OpNot || op == OpCopy
+}
+
+type AddrKind uint
+
+const (
+	Literal = iota // prefijo #
+	Global         // prefijo @
+	Offset         // sin prefijo
+)
+
+type Addr struct {
+	Kind  AddrKind
+	Value int // literal or offset in frame or offset in data section
+}
+
+func (a Addr) String() string {
+	switch a.Kind {
+	case Literal:
+		return "#" + fmt.Sprint(a.Value)
+	case Global:
+		return "@" + fmt.Sprint(a.Value)
+	case Offset:
+		return fmt.Sprint(a.Value)
+	default:
+		panic(fmt.Sprintf("invalid address kind %d", int(a.Kind)))
+	}
+}
+
 type Instr struct {
 	Op Op
-	D  string // Destination
-	A  string // Operand A
-	B  string // Operand B
-	S  string // Name
-	K  int    // Arity (CALL)
+	D  Addr // Destination
+	A  Addr // Operand A
+	B  Addr // Operand B
+	S  Addr // Name
+	K  int  // Arity (CALL)
 }
 
 type Block struct {
