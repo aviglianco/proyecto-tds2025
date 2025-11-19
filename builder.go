@@ -17,7 +17,7 @@ type Builder struct {
 // builderErrorf creates an error message annotated with the line and column
 func builderErrorf(n *sitter.Node, format string, a ...any) error {
 	if n != nil {
-		return fmt.Errorf("line %d, col %d: "+format, append([]interface{}{nodeLine(n), nodeCol(n)}, a...)...)
+		return fmt.Errorf("line %d, col %d: "+format, append([]any{nodeLine(n), nodeCol(n)}, a...)...)
 	}
 	return fmt.Errorf(format, a...)
 }
@@ -375,7 +375,7 @@ func (builder *Builder) buildAssignment(n *sitter.Node) (*Assignment, error) {
 	ir_code := slices.Concat(
 		val.getCode(),
 		[]ir.Instr{
-			ir.Instr{
+			{
 				Op: ir.OpCopy,
 				D:  symbol.Address,
 				A:  val.getAddress(),
@@ -507,6 +507,25 @@ func (builder *Builder) buildCallExpr(n *sitter.Node) (Expr, error) {
 	return &CallExpr{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Callee: Identifier(text(idNode, builder.src)), Args: args}, nil
 }
 
+func (builder *Builder) getNewOffsetAddress() ir.Addr {
+
+	addr := ir.Addr{
+		Kind:  ir.Offset,
+		Value: builder.getNewOffset(),
+	}
+
+	return addr
+}
+
+func (builder *Builder) getLiteralAddress(value int) ir.Addr {
+	addr := ir.Addr{
+		Kind:  ir.Literal,
+		Value: value,
+	}
+
+	return addr
+}
+
 func (builder *Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 	left := n.NamedChild(0)
 	right := n.NamedChild(1)
@@ -558,7 +577,19 @@ func (builder *Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 		fmt.Println(t)
 	}
 
-	return &BinaryExpr{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Left: l, Op: op, Right: r, Type: t}, nil
+	addr := builder.getNewOffsetAddress()
+
+	ir_code := slices.Concat(
+		l.getCode(),
+		r.getCode(),
+		[]ir.Instr{
+			{
+				Op: ir.OpAdd, D: addr, A: l.getAddress(), B: r.getAddress(),
+			},
+		},
+	)
+
+	return &BinaryExpr{NodeBase: NodeBase{Code: ir_code, Line: nodeLine(n), Col: nodeCol(n)}, Left: l, Op: op, Right: r, Type: t}, nil
 }
 
 func (builder *Builder) buildUnaryExpr(n *sitter.Node) (Expr, error) {
@@ -570,15 +601,33 @@ func (builder *Builder) buildUnaryExpr(n *sitter.Node) (Expr, error) {
 	}
 	var op UnaryOp
 	var t TypeKind
+	var ir_code []ir.Instr
+
+	addr := builder.getNewOffsetAddress()
+
 	switch text(opNode, builder.src) {
 	case "-":
 		op = UnaryNeg
 		t = TypeInteger
+		ir_code = slices.Concat(
+			expr.getCode(),
+			[]ir.Instr{
+				{Op: ir.OpSub, D: addr, A: builder.getLiteralAddress(0), B: expr.getAddress()},
+			},
+		)
 	case "!":
 		op = UnaryNot
 		t = TypeBool
+		ir_code = slices.Concat(
+			expr.getCode(),
+			[]ir.Instr{
+				{Op: ir.OpNot, D: addr, A: expr.getAddress()},
+			},
+		)
+
 	default:
 		return nil, builderErrorf(n, "unknown unary op: %s", text(opNode, builder.src))
 	}
-	return &UnaryExpr{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Op: op, Expr: expr, Type: t}, nil
+
+	return &UnaryExpr{NodeBase: NodeBase{Code: ir_code, Line: nodeLine(n), Col: nodeCol(n)}, Op: op, Expr: expr, Type: t}, nil
 }
