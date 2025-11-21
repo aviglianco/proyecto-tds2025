@@ -98,11 +98,11 @@ func (a Addr) String() string {
 
 type Instr struct {
 	Op Op
-	D  Addr // Destination
-	A  Addr // Operand A
-	B  Addr // Operand B
-	S  Addr // Name
-	K  int  // Arity (CALL)
+	D  Addr   // Destination
+	A  Addr   // Operand A
+	B  Addr   // Operand B
+	S  string // Label
+	K  int    // Arity (CALL)
 }
 
 type Block struct {

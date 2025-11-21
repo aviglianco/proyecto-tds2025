@@ -85,19 +85,19 @@ func (i Instr) Format() string {
 		return i.D.String() + " = (" + i.A.String() + " == " + i.B.String() + ")"
 
 	case OpIfZ:
-		return "ifz " + i.A.String() + " -> " + i.S.String()
+		return "ifz " + i.A.String() + " -> " + i.S
 	case OpGoto:
-		return "goto " + i.S.String()
+		return "goto " + i.S
 	case OpLabel:
-		return i.S.String() + ":"
+		return i.S + ":"
 
 	case OpParam:
 		return "param " + i.A.String()
 	case OpCall:
 		if i.D.String() != "" {
-			return i.D.String() + " = call " + i.S.String() + ", " + itoa(i.K)
+			return i.D.String() + " = call " + i.S + ", " + itoa(i.K)
 		}
-		return "call " + i.S.String() + ", " + itoa(i.K)
+		return "call " + i.S + ", " + itoa(i.K)
 
 	case OpRet:
 		return "ret"
