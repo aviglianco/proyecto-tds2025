@@ -539,37 +539,48 @@ func (builder *Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 	}
 	var op BinOp
 	var t TypeKind
+	var ir_op ir.Op
 
 	switch n.Kind() {
 	case "int_sum":
 		op = BinAdd
+		ir_op = ir.OpAdd
 		t = TypeInteger
 	case "int_sub":
 		op = BinSub
+		ir_op = ir.OpSub
 		t = TypeInteger
 	case "int_prod":
 		op = BinMul
+		ir_op = ir.OpMul
 		t = TypeInteger
 	case "int_div":
 		op = BinDiv
+		ir_op = ir.OpDiv
 		t = TypeInteger
 	case "int_rem":
 		op = BinRem
+		ir_op = ir.OpRem
 		t = TypeInteger
 	case "rel_eq":
 		op = BinEq
+		ir_op = ir.OpEQ
 		t = TypeBool
 	case "rel_lt":
 		op = BinLT
+		ir_op = ir.OpLT
 		t = TypeBool
 	case "rel_gt":
 		op = BinGT
+		ir_op = ir.OpGT
 		t = TypeBool
 	case "bool_conjunction":
 		op = BinAnd
+		ir_op = ir.OpAnd
 		t = TypeBool
 	case "bool_disjunction":
 		op = BinOr
+		ir_op = ir.OpOr
 		t = TypeBool
 	}
 
@@ -584,7 +595,7 @@ func (builder *Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 		r.getCode(),
 		[]ir.Instr{
 			{
-				Op: ir.OpAdd, D: addr, A: l.getAddress(), B: r.getAddress(),
+				Op: ir_op, D: addr, A: l.getAddress(), B: r.getAddress(),
 			},
 		},
 	)
@@ -609,6 +620,9 @@ func (builder *Builder) buildUnaryExpr(n *sitter.Node) (Expr, error) {
 	case "-":
 		op = UnaryNeg
 		t = TypeInteger
+
+		// si la produccion es E -> - E1
+		// generamos la operacion binaria de resta #0 - M[lv(E1)]
 		ir_code = slices.Concat(
 			expr.getCode(),
 			[]ir.Instr{
