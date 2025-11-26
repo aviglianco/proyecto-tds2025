@@ -575,6 +575,7 @@ func (builder *Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 		ir_op = ir.OpGT
 		t = TypeBool
 	case "bool_conjunction":
+		// TODO: fixear este error haciendo codigo de saltos y COPY
 		op = BinAnd
 		ir_op = ir.OpAnd
 		t = TypeBool

@@ -12,10 +12,6 @@ const (
 	OpDiv
 	OpRem
 
-	// Logical operations
-	OpAnd
-	OpOr
-
 	// Relational operations
 	OpLT
 	OpGT
@@ -43,8 +39,6 @@ var opNames = []string{
 	"OpMul",
 	"OpDiv",
 	"OpRem",
-	"OpAnd",
-	"OpOr",
 	"OpLT",
 	"OpGT",
 	"OpEQ",
