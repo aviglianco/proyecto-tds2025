@@ -74,7 +74,7 @@ const (
 
 type Addr struct {
 	Kind  AddrKind
-	Value int // literal or offset in frame or offset in data section
+	Value int // literal or offset in frame(negative means it's a function parameter) or offset in data section
 }
 
 func (a Addr) String() string {
@@ -98,6 +98,8 @@ type Instr struct {
 	S  string // Label
 	K  int    // Arity (CALL)
 }
+
+type Code []Instr
 
 type Block struct {
 	Label  string

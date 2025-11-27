@@ -4,14 +4,16 @@ import (
 	ir "compilador/ir"
 	"fmt"
 	"slices"
+	"strconv"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 type Builder struct {
-	symbolTable   Env
-	src           []byte
-	currentOffset int
+	symbolTable     Env
+	src             []byte
+	currentOffset   int
+	currentLabelNum int
 }
 
 // builderErrorf creates an error message annotated with the line and column
@@ -110,6 +112,11 @@ func (builder *Builder) buildProgram(n *sitter.Node) (*Program, error) {
 func (builder *Builder) getNewOffset() int {
 	builder.currentOffset += 1
 	return builder.currentOffset
+}
+
+func (builder *Builder) getNewLabel() string {
+	builder.currentLabelNum += 1
+	return "L" + strconv.Itoa(builder.currentLabelNum)
 }
 
 func (builder *Builder) resetOffset() {
@@ -247,13 +254,13 @@ func (builder *Builder) buildMethodDecl(n *sitter.Node) (*MethodDecl, error) {
 		}
 
 		funcEnv := Env{Prev: &prevEnv, Table: make(Table)}
-		for _, p := range params {
+		for i, p := range params {
 			funcEnv.Insert(
 				p.Name,
 				Symbol{Type: p.Type, VarKind: LocalVar,
 					Address: ir.Addr{
 						Kind:  ir.Offset,
-						Value: builder.getNewOffset(),
+						Value: -(i + 1),
 					},
 				})
 		}
@@ -451,23 +458,25 @@ func (builder *Builder) buildExpr(n *sitter.Node) (Expr, error) {
 	if n == nil {
 		return nil, builderErrorf(n, "nil expression node")
 	}
+	addr := builder.getNewOffsetAddress()
+
 	switch n.Kind() {
 	case "num":
 		// parse int
 		var v int
 		fmt.Sscanf(text(n, builder.src), "%d", &v)
-		return &IntLiteral{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Value: v, Type: TypeInteger}, nil
+		return &IntLiteral{NodeBase: NodeBase{Code: []ir.Instr{{Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(v)}}, Line: nodeLine(n), Col: nodeCol(n)}, Value: v, Type: TypeInteger, ExprBase: ExprBase{Address: addr}}, nil
 	case "true":
-		return &BoolLiteral{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Value: true, Type: TypeBool}, nil
+		return &BoolLiteral{NodeBase: NodeBase{Code: []ir.Instr{{Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(1)}}, Line: nodeLine(n), Col: nodeCol(n)}, Value: true, Type: TypeBool, ExprBase: ExprBase{Address: addr}}, nil
 	case "false":
-		return &BoolLiteral{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Value: false, Type: TypeBool}, nil
+		return &BoolLiteral{NodeBase: NodeBase{Code: []ir.Instr{{Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(0)}}, Line: nodeLine(n), Col: nodeCol(n)}, Value: true, Type: TypeBool, ExprBase: ExprBase{Address: addr}}, nil
 	case "identifier":
 		name := Identifier(text(n, builder.src))
 		symbol, ok := builder.symbolTable.Lookup(name)
 		if !ok {
 			return nil, builderErrorf(n, "could not resolve type of %s", name)
 		}
-		return &IdentExpr{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Name: name, Type: symbol.Type}, nil
+		return &IdentExpr{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Name: name, Type: symbol.Type, ExprBase: ExprBase{Address: symbol.Address}}, nil
 	case "method_call":
 		return builder.buildCallExpr(n)
 	case "int_sum", "int_sub", "int_prod", "int_div",
@@ -482,10 +491,7 @@ func (builder *Builder) buildExpr(n *sitter.Node) (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ParenExpr{
-			NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)},
-			Inner:    e,
-		}, nil
+		return e, nil
 	}
 	return nil, builderErrorf(n, "unhandled expression node type: %s", n.Kind())
 }
@@ -493,18 +499,26 @@ func (builder *Builder) buildExpr(n *sitter.Node) (Expr, error) {
 func (builder *Builder) buildCallExpr(n *sitter.Node) (Expr, error) {
 	idNode := n.Child(0)
 	args := []Expr{}
+	var ir_argument_code ir.Code
+	var ir_param_calls_code ir.Code
+	functionName := text(idNode, builder.src)
 	for i := uint(0); i < n.NamedChildCount(); i++ {
 		c := n.NamedChild(i)
 		if c.Kind() == "identifier" && i == 0 {
 			continue
 		}
 		e, err := builder.buildExpr(c)
+		ir_argument_code = slices.Concat(ir_argument_code, e.getCode())
+		ir_param_calls_code = slices.Concat(ir_param_calls_code, ir.Code{{Op: ir.OpParam, A: e.getAddress()}})
 		if err != nil {
 			return nil, err
 		}
 		args = append(args, e)
 	}
-	return &CallExpr{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Callee: Identifier(text(idNode, builder.src)), Args: args}, nil
+
+	addr := builder.getNewOffsetAddress()
+	ir_code := slices.Concat(ir_argument_code, ir_param_calls_code, ir.Code{{Op: ir.OpCall, D: addr, S: functionName, K: len(args)}})
+	return &CallExpr{NodeBase: NodeBase{Code: ir_code, Line: nodeLine(n), Col: nodeCol(n)}, Callee: Identifier(functionName), Args: args, ExprBase: ExprBase{Address: addr}}, nil
 }
 
 func (builder *Builder) getNewOffsetAddress() ir.Addr {
@@ -539,7 +553,13 @@ func (builder *Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 	}
 	var op BinOp
 	var t TypeKind
+
+	// IR stuff
 	var ir_op ir.Op
+	addr := builder.getNewOffsetAddress()
+	var ir_code []ir.Instr
+
+	expIsBoolean := false
 
 	switch n.Kind() {
 	case "int_sum":
@@ -575,33 +595,115 @@ func (builder *Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 		ir_op = ir.OpGT
 		t = TypeBool
 	case "bool_conjunction":
+		expIsBoolean = true
 		// TODO: fixear este error haciendo codigo de saltos y COPY
 		op = BinAnd
-		ir_op = ir.OpAnd
 		t = TypeBool
+
+		setTrueLabel := builder.getNewLabel()
+		setFalseLabel := builder.getNewLabel()
+		exitLabel := builder.getNewLabel()
+
+		ir_code = slices.Concat(
+			l.getCode(),
+			r.getCode(),
+			[]ir.Instr{
+				{
+					Op: ir.OpIfZ, S: setFalseLabel, A: l.getAddress(),
+				},
+				{
+					Op: ir.OpIfZ, S: setFalseLabel, A: r.getAddress(),
+				},
+				{
+					Op: ir.OpGoto, S: setTrueLabel,
+				},
+				{
+					Op: ir.OpLabel, S: setFalseLabel,
+				},
+				{
+					Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(0),
+				},
+				{
+					Op: ir.OpGoto, S: exitLabel,
+				},
+				{
+					Op: ir.OpLabel, S: setTrueLabel,
+				},
+				{
+					Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(1),
+				},
+				{
+					Op: ir.OpLabel, S: exitLabel,
+				},
+			},
+		)
+
 	case "bool_disjunction":
+		expIsBoolean = true
 		op = BinOr
-		ir_op = ir.OpOr
 		t = TypeBool
+
+		setTrueLabel := builder.getNewLabel()
+		setFalseLabel := builder.getNewLabel()
+		checkSecondLabel := builder.getNewLabel()
+		exitLabel := builder.getNewLabel()
+
+		ir_code = slices.Concat(
+			l.getCode(),
+			r.getCode(),
+			[]ir.Instr{
+				{
+					Op: ir.OpIfZ, A: l.getAddress(), S: checkSecondLabel,
+				},
+				{
+					Op: ir.OpGoto, A: l.getAddress(), S: setTrueLabel,
+				},
+				{
+					Op: ir.OpLabel, S: checkSecondLabel,
+				},
+				{
+					Op: ir.OpIfZ, A: r.getAddress(), S: setFalseLabel,
+				},
+				{
+					Op: ir.OpLabel, S: setTrueLabel,
+				},
+				{
+					Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(1),
+				},
+				{
+					Op: ir.OpGoto, S: exitLabel,
+				},
+				{
+					Op: ir.OpLabel, S: setFalseLabel,
+				},
+				{
+					Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(0),
+				},
+				{
+					Op: ir.OpLabel, S: exitLabel,
+				},
+			},
+		)
 	}
 
 	if n.Kind() == "int_rem" {
 		fmt.Println(t)
 	}
 
-	addr := builder.getNewOffsetAddress()
-
-	ir_code := slices.Concat(
-		l.getCode(),
-		r.getCode(),
-		[]ir.Instr{
-			{
-				Op: ir_op, D: addr, A: l.getAddress(), B: r.getAddress(),
+	if !expIsBoolean {
+		ir_code = slices.Concat(
+			l.getCode(),
+			r.getCode(),
+			[]ir.Instr{
+				{
+					Op: ir_op, D: addr, A: l.getAddress(), B: r.getAddress(),
+				},
 			},
-		},
-	)
+		)
 
-	return &BinaryExpr{NodeBase: NodeBase{Code: ir_code, Line: nodeLine(n), Col: nodeCol(n)}, Left: l, Op: op, Right: r, Type: t}, nil
+	}
+
+	return &BinaryExpr{NodeBase: NodeBase{Code: ir_code, Line: nodeLine(n), Col: nodeCol(n)}, Left: l, Op: op, Right: r, Type: t, ExprBase: ExprBase{Address: addr}}, nil
 }
 
 func (builder *Builder) buildUnaryExpr(n *sitter.Node) (Expr, error) {
@@ -644,5 +746,5 @@ func (builder *Builder) buildUnaryExpr(n *sitter.Node) (Expr, error) {
 		return nil, builderErrorf(n, "unknown unary op: %s", text(opNode, builder.src))
 	}
 
-	return &UnaryExpr{NodeBase: NodeBase{Code: ir_code, Line: nodeLine(n), Col: nodeCol(n)}, Op: op, Expr: expr, Type: t}, nil
+	return &UnaryExpr{NodeBase: NodeBase{Code: ir_code, Line: nodeLine(n), Col: nodeCol(n)}, Op: op, Expr: expr, Type: t, ExprBase: ExprBase{Address: addr}}, nil
 }
