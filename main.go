@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	parserlang "compilador/bindings/go"
+	"compilador/ir"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
@@ -89,12 +90,7 @@ func main() {
 		}
 	}
 
-	// Generate IR (three address code), validate, and write alongside other outputs
-	// m, err := GenerateIR(ast)
-	// if err != nil {
-	// 	fmt.Fprintf(os.Stderr, "ir error: %v\n", err)
-	// 	os.Exit(1)
-	// }
+	ir_code := ast.Code
 
 	// OUTPUT PREPARATION
 
@@ -127,10 +123,10 @@ func main() {
 	}
 
 	// Write IR to .ci file in result folder
-	// ciPath := filepath.Join(resultsDir, baseName+".ci")
-	// if err := os.WriteFile(ciPath, []byte(m.String()), 0644); err != nil {
-	// 	fmt.Fprintf(os.Stderr, "error writing IR output: %v\n", err)
-	// 	os.Exit(1)
-	// }
-	// fmt.Println("IR written to:", ciPath)
+	ciPath := filepath.Join(resultsDir, baseName+".ci")
+	if err := os.WriteFile(ciPath, []byte(ir.PrettyPrint(ir_code)), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing IR output: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("IR written to:", ciPath)
 }

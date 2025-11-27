@@ -5,105 +5,67 @@ import (
 	"strings"
 )
 
-func (m *Module) String() string {
-	var b strings.Builder
-	for i, fn := range m.Functions {
-		b.WriteString(fn.String())
-		if i+1 < len(m.Functions) {
-			b.WriteByte('\n')
-		}
-	}
-	return b.String()
-}
+// PrettyPrint formats a Code (slice of Instr) into a human-readable string.
+func PrettyPrint(code Code) string {
+	var sb strings.Builder
 
-func (f *Function) String() string {
-	var b strings.Builder
-	if f.Extern {
-		b.WriteString("extern func ")
-		b.WriteString(f.Name)
-		b.WriteString("()\n")
-		return b.String()
-	}
-	b.WriteString("func ")
-	b.WriteString(f.Name)
-	b.WriteString("():\n")
+	for i, instr := range code {
+		sb.WriteString(fmt.Sprintf("%3d: %s", i, instr.Op))
 
-	for _, blk := range f.Blocks {
-		if blk.Label != "" {
-			b.WriteString(blk.Label)
-			b.WriteString(":\n")
-		}
-		for _, ins := range blk.Instrs {
-			line := ins.Format()
-			if line == "" {
-				continue
+		switch instr.Op {
+
+		// Label
+		case OpLabel:
+			if instr.S != "" {
+				sb.WriteString(fmt.Sprintf(" %s", instr.S))
 			}
-			b.WriteString("  ")
-			b.WriteString(line)
-			b.WriteByte('\n')
+
+		// Calls (arity K)
+		case OpCall:
+			sb.WriteString(fmt.Sprintf(" %s(%d args)", instr.A, instr.K))
+			if instr.D.Kind != Offset || instr.D.Value != 0 {
+				// Destination only printed if meaningful
+				sb.WriteString(fmt.Sprintf(" -> %s", instr.D))
+			}
+
+		case OpRetV:
+			sb.WriteString(fmt.Sprintf(" %s", instr.A))
+
+		case OpRet:
+			// no operands, just return
+
+		// Unary ops
+		case OpNot, OpCopy:
+			sb.WriteString(fmt.Sprintf(" %s -> %s", instr.A, instr.D))
+
+		// Jumps
+		case OpGoto:
+			sb.WriteString(fmt.Sprintf(" %s", instr.S))
+
+		case OpIfZ:
+			sb.WriteString(fmt.Sprintf(" %s -> %s", instr.A, instr.S))
+
+		// Binary ops (A, B -> D)
+		default:
+			// Many ops have 3 addresses D, A, B
+			// Only print those that are meaningfully used
+			hasA := instr.A.Kind == Literal || instr.A.Kind == Global || (instr.A.Kind == Offset)
+			hasB := instr.B.Kind == Literal || instr.B.Kind == Global || (instr.B.Kind == Offset)
+			hasD := instr.D.Kind == Literal || instr.D.Kind == Global || (instr.D.Kind == Offset)
+
+			if hasD {
+				sb.WriteString(fmt.Sprintf(" %s", instr.D))
+			}
+			if hasA {
+				sb.WriteString(fmt.Sprintf(", %s", instr.A))
+			}
+			if hasB {
+				sb.WriteString(fmt.Sprintf(", %s", instr.B))
+			}
 		}
-	}
-	return b.String()
-}
 
-func (i Instr) FormatUnary() string {
-
-	switch i.Op {
-	case OpNot:
-		return i.D.String() + " = !" + i.A.String()
-	case OpCopy:
-		return "copy " + i.D.String() + ", " + i.A.String()
-	default:
-		panic(fmt.Sprintf("not a unary operation %s", i.Op.String()))
+		sb.WriteByte('\n')
 	}
 
-}
-
-func (i Instr) Format() string {
-
-	if i.Op.isUnary() {
-		return i.FormatUnary()
-	}
-
-	switch i.Op {
-	case OpAdd:
-		return i.D.String() + " = (" + i.A.String() + " + " + i.B.String() + ")"
-	case OpSub:
-		return i.D.String() + " = (" + i.A.String() + " - " + i.B.String() + ")"
-	case OpMul:
-		return i.D.String() + " = (" + i.A.String() + " * " + i.B.String() + ")"
-	case OpDiv:
-		return i.D.String() + " = (" + i.A.String() + " / " + i.B.String() + ")"
-	case OpRem:
-		return i.D.String() + " = (" + i.A.String() + " % " + i.B.String() + ")"
-
-	case OpLT:
-		return i.D.String() + " = (" + i.A.String() + " < " + i.B.String() + ")"
-	case OpGT:
-		return i.D.String() + " = (" + i.A.String() + " > " + i.B.String() + ")"
-	case OpEQ:
-		return i.D.String() + " = (" + i.A.String() + " == " + i.B.String() + ")"
-
-	case OpIfZ:
-		return "ifz " + i.A.String() + " -> " + i.S
-	case OpGoto:
-		return "goto " + i.S
-	case OpLabel:
-		return i.S + ":"
-
-	case OpParam:
-		return "param " + i.A.String()
-	case OpCall:
-		if i.D.String() != "" {
-			return i.D.String() + " = call " + i.S + ", " + itoa(i.K)
-		}
-		return "call " + i.S + ", " + itoa(i.K)
-
-	case OpRet:
-		return "ret"
-	case OpRetV:
-		return "ret " + i.D.String()
-	default:
-		return ""
-	}
+	return sb.String()
 }

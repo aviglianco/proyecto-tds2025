@@ -101,23 +101,6 @@ type Instr struct {
 
 type Code []Instr
 
-type Block struct {
-	Label  string
-	Instrs []Instr
-}
-
-type Function struct {
-	Name   string
-	Params []string
-	Locals []string
-	Blocks []Block
-	Extern bool
-}
-
-type Module struct {
-	Functions []Function
-}
-
 // --- helpers for constants ---
 func ConstInt(n int) string { return "#" + itoa(n) }
 

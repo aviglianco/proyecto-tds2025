@@ -66,6 +66,8 @@ type VarDecl struct {
 	Value Expr
 }
 
+func (n *VarDecl) getCode() []ir.Instr { return n.Code }
+
 func (d *VarDecl) NodeType() string { return "VarDecl" }
 
 // Parameter corresponds to `parameter` (type + identifier)

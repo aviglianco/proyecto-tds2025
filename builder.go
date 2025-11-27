@@ -82,6 +82,7 @@ func (builder *Builder) buildProgram(n *sitter.Node) (*Program, error) {
 	}
 
 	p := &Program{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}}
+	var ir_code ir.Code
 
 	for i := uint(0); i < n.NamedChildCount(); i++ {
 		c := n.NamedChild(i)
@@ -95,12 +96,14 @@ func (builder *Builder) buildProgram(n *sitter.Node) (*Program, error) {
 				return nil, err
 			}
 			p.Declarations = append(p.Declarations, decl)
+			ir_code = slices.Concat(ir_code, decl.getCode())
 		case "method_declaration_statement":
 			m, err := builder.buildMethodDecl(c)
 			if err != nil {
 				return nil, err
 			}
 			p.Methods = append(p.Methods, m)
+			// ir_code = slices.Concat(ir_code, m.getCode())
 		}
 	}
 
