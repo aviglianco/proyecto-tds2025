@@ -16,14 +16,10 @@ program
           integer y = 0;
           y = get_int();
 
-          if (!(y > 100)) then {
-            while (y < 100) {
-              y = inc(y);
-            }
+          if (y < 5) then {
+            inc(y);
           } else {
             print_int(y);
           }
-
-          print_int(y);
         }
 }

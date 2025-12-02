@@ -10,10 +10,11 @@ import (
 )
 
 type Builder struct {
-	symbolTable     Env
-	src             []byte
-	currentOffset   int
-	currentLabelNum int
+	symbolTable         Env
+	src                 []byte
+	currentLocalOffset  int
+	currentGlobalOffset int
+	currentLabelNum     int
 }
 
 // builderErrorf creates an error message annotated with the line and column
@@ -82,7 +83,8 @@ func (builder *Builder) buildProgram(n *sitter.Node) (*Program, error) {
 	}
 
 	p := &Program{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}}
-	var ir_code ir.Code
+	var ir_code ir.Code      // accumulated global declarations (initializers)
+	var method_codes ir.Code // accumulated method codes (labels + bodies)
 
 	for i := uint(0); i < n.NamedChildCount(); i++ {
 		c := n.NamedChild(i)
@@ -103,18 +105,36 @@ func (builder *Builder) buildProgram(n *sitter.Node) (*Program, error) {
 				return nil, err
 			}
 			p.Methods = append(p.Methods, m)
-			// ir_code = slices.Concat(ir_code, m.getCode())
+			// Accumulate method code
+			method_codes = slices.Concat(method_codes, m.getCode())
 		}
 	}
+
+	builder.resetOffset()
+
+	// Build _init routine from accumulated global initializer code
+	init_code := ir.Code{
+		{Op: ir.OpLabel, S: "_init"},
+	}
+	init_code = slices.Concat(init_code, ir_code)
+	init_code = slices.Concat(init_code, ir.Code{{Op: ir.OpRet}})
+
+	// Compose final program code: _init followed by all methods
+	p.NodeBase.Code = slices.Concat(init_code, method_codes)
 
 	// expose built symbol table at program level
 	p.Symbols = builder.symbolTable
 	return p, nil
 }
 
-func (builder *Builder) getNewOffset() int {
-	builder.currentOffset += 1
-	return builder.currentOffset
+func (builder *Builder) getNewLocalOffset() int {
+	builder.currentLocalOffset += 1
+	return builder.currentLocalOffset
+}
+
+func (builder *Builder) getNewGlobalOffset() int {
+	builder.currentGlobalOffset += 1
+	return builder.currentGlobalOffset
 }
 
 func (builder *Builder) getNewLabel() string {
@@ -123,7 +143,7 @@ func (builder *Builder) getNewLabel() string {
 }
 
 func (builder *Builder) resetOffset() {
-	builder.currentOffset = 0
+	builder.currentLocalOffset = 0
 }
 
 func (builder *Builder) buildLocalVarDecl(n *sitter.Node) (*VarDecl, error) {
@@ -139,6 +159,11 @@ func (builder *Builder) buildLocalVarDecl(n *sitter.Node) (*VarDecl, error) {
 	val, err := builder.buildExpr(valNode)
 
 	_, ok := builder.symbolTable.Table[name]
+	dest := ir.Addr{
+		Kind:  ir.Offset,
+		Value: builder.getNewLocalOffset(),
+	}
+
 	if ok {
 		return nil, builderErrorf(n, "cannot double declare :%s", name)
 	} else {
@@ -147,10 +172,7 @@ func (builder *Builder) buildLocalVarDecl(n *sitter.Node) (*VarDecl, error) {
 			Symbol{
 				Type:    t,
 				VarKind: LocalVar,
-				Address: ir.Addr{
-					Kind:  ir.Offset,
-					Value: builder.getNewOffset(),
-				},
+				Address: dest,
 			},
 		)
 	}
@@ -158,7 +180,19 @@ func (builder *Builder) buildLocalVarDecl(n *sitter.Node) (*VarDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &VarDecl{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Type: t, Name: name, Value: val}, nil
+	// Emit IR to initialize the local variable
+	ir_code := slices.Concat(
+		val.getCode(),
+		[]ir.Instr{
+			{Op: ir.OpCopy, D: dest, A: val.getAddress()},
+		},
+	)
+	return &VarDecl{
+		NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n), Code: ir_code},
+		Type:     t,
+		Name:     name,
+		Value:    val,
+	}, nil
 }
 
 func (builder *Builder) buildGlobalVarDecl(n *sitter.Node) (*VarDecl, error) {
@@ -174,6 +208,10 @@ func (builder *Builder) buildGlobalVarDecl(n *sitter.Node) (*VarDecl, error) {
 	val, err := builder.buildExpr(valNode)
 
 	_, ok := builder.symbolTable.Table[name]
+	dest := ir.Addr{
+		Kind:  ir.Global,
+		Value: builder.getNewGlobalOffset(),
+	}
 	if ok {
 		return nil, builderErrorf(n, "cannot double declare :%s", name)
 	} else {
@@ -182,10 +220,7 @@ func (builder *Builder) buildGlobalVarDecl(n *sitter.Node) (*VarDecl, error) {
 			Symbol{
 				Type:    t,
 				VarKind: GlobalVar,
-				Address: ir.Addr{
-					Kind:  ir.Global,
-					Value: builder.getNewOffset(),
-				},
+				Address: dest,
 			},
 		)
 	}
@@ -193,7 +228,19 @@ func (builder *Builder) buildGlobalVarDecl(n *sitter.Node) (*VarDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &VarDecl{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Type: t, Name: name, Value: val}, nil
+	// Emit IR to initialize the global variable (to be placed in _init)
+	ir_code := slices.Concat(
+		val.getCode(),
+		[]ir.Instr{
+			{Op: ir.OpCopy, D: dest, A: val.getAddress()},
+		},
+	)
+	return &VarDecl{
+		NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n), Code: ir_code},
+		Type:     t,
+		Name:     name,
+		Value:    val,
+	}, nil
 }
 
 func (builder *Builder) buildType(n *sitter.Node) (TypeKind, error) {
@@ -270,6 +317,9 @@ func (builder *Builder) buildMethodDecl(n *sitter.Node) (*MethodDecl, error) {
 		builder.symbolTable = funcEnv
 	}
 
+	// Reset temporaries/locals offset counter at function entry
+	builder.resetOffset()
+
 	// extern or block
 	var body *Block
 	extern := false
@@ -289,10 +339,27 @@ func (builder *Builder) buildMethodDecl(n *sitter.Node) (*MethodDecl, error) {
 
 	builder.symbolTable = prevEnv
 
-	builder.resetOffset()
+	// Assemble method IR code
+	methodCode := ir.Code{{Op: ir.OpLabel, S: string(name)}}
+	if string(name) == "main" && !extern {
+		// Ensure global initializers run before main body
+		methodCode = slices.Concat(methodCode, ir.Code{{Op: ir.OpCall, S: "_init", D: ir.Addr{Kind: ir.Offset, Value: 0}, K: 0}})
+	}
+	if body != nil {
+		for _, d := range body.Declarations {
+			methodCode = slices.Concat(methodCode, d.getCode())
+		}
+		for _, s := range body.Stmts {
+			methodCode = slices.Concat(methodCode, s.getCode())
+		}
+	}
+	// Add explicit epilogue for void functions to avoid fall-through
+	if t == TypeVoid && !extern {
+		methodCode = slices.Concat(methodCode, ir.Code{{Op: ir.OpRet}})
+	}
 
 	return &MethodDecl{
-		NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)},
+		NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n), Code: methodCode},
 		Return:   t,
 		Name:     name,
 		Params:   params,
@@ -359,9 +426,22 @@ func (builder *Builder) buildBlock(n *sitter.Node) (*Block, error) {
 			if err != nil {
 				return nil, err
 			}
-			b.Stmts = append(b.Stmts, &ExprStmt{NodeBase: NodeBase{Line: nodeLine(c), Col: nodeCol(c)}, Expr: e})
+			b.Stmts = append(b.Stmts, &ExprStmt{
+				NodeBase: NodeBase{Line: nodeLine(c), Col: nodeCol(c), Code: e.getCode()},
+				Expr:     e,
+			})
 		}
 	}
+
+	// Aggregate block IR: declarations first, then statements
+	var blockCode ir.Code
+	for _, d := range b.Declarations {
+		blockCode = slices.Concat(blockCode, d.getCode())
+	}
+	for _, s := range b.Stmts {
+		blockCode = slices.Concat(blockCode, s.getCode())
+	}
+	b.Code = blockCode
 
 	builder.symbolTable = prevEnv
 	return b, nil
@@ -400,14 +480,41 @@ func (builder *Builder) buildAssignment(n *sitter.Node) (*Assignment, error) {
 
 func (builder *Builder) buildReturnStmt(n *sitter.Node) (*ReturnStmt, error) {
 	valNode := n.ChildByFieldName("value")
+
 	if valNode == nil {
-		return &ReturnStmt{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}}, nil
+		// void return -> emit OpRet
+		return &ReturnStmt{
+			NodeBase: NodeBase{
+				Line: nodeLine(n),
+				Col:  nodeCol(n),
+				Code: []ir.Instr{
+					{Op: ir.OpRet},
+				},
+			},
+		}, nil
 	}
+
+	// return with value -> evaluate expression and emit OpRetV with the value address
 	val, err := builder.buildExpr(valNode)
 	if err != nil {
 		return nil, err
 	}
-	return &ReturnStmt{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Value: val}, nil
+
+	ir_code := slices.Concat(
+		val.getCode(),
+		[]ir.Instr{
+			{Op: ir.OpRetV, A: val.getAddress()},
+		},
+	)
+
+	return &ReturnStmt{
+		NodeBase: NodeBase{
+			Line: nodeLine(n),
+			Col:  nodeCol(n),
+			Code: ir_code,
+		},
+		Value: val,
+	}, nil
 }
 
 func (builder *Builder) buildIfStmt(n *sitter.Node) (*IfStmt, error) {
@@ -436,7 +543,58 @@ func (builder *Builder) buildIfStmt(n *sitter.Node) (*IfStmt, error) {
 		elseBlk, _ = builder.buildBlock(blocks[1])
 	}
 
-	return &IfStmt{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Cond: cond, Then: thenBlk, Else: elseBlk}, nil
+	// --- IR generation for if / if-else ---
+	// if (cond) then thenBlk [else elseBlk]
+	var ir_code ir.Code
+	if elseBlk == nil {
+		// Single-branch if:
+		//   cond.code
+		//   IfZ cond.addr -> Lend
+		//   thenBlk.code
+		// Lend:
+		endLabel := builder.getNewLabel()
+		ir_code = slices.Concat(
+			cond.getCode(),
+			ir.Code{
+				{Op: ir.OpIfZ, A: cond.getAddress(), S: endLabel},
+			},
+		)
+
+		if thenBlk != nil {
+			ir_code = slices.Concat(ir_code, thenBlk.getCode())
+		}
+
+		ir_code = slices.Concat(ir_code, ir.Code{{Op: ir.OpLabel, S: endLabel}})
+	} else {
+		// If-else:
+		//   cond.code
+		//   IfZ cond.addr -> Lelse
+		//   thenBlk.code
+		//   Goto Lend
+		// Lelse:
+		//   elseBlk.code
+		// Lend:
+		elseLabel := builder.getNewLabel()
+		endLabel := builder.getNewLabel()
+		ir_code = slices.Concat(
+			cond.getCode(),
+			ir.Code{
+				{Op: ir.OpIfZ, A: cond.getAddress(), S: elseLabel},
+			},
+		)
+		ir_code = slices.Concat(ir_code, thenBlk.getCode())
+		ir_code = slices.Concat(ir_code, ir.Code{{Op: ir.OpGoto, S: endLabel}})
+		ir_code = slices.Concat(ir_code, ir.Code{{Op: ir.OpLabel, S: elseLabel}})
+		ir_code = slices.Concat(ir_code, elseBlk.getCode())
+		ir_code = slices.Concat(ir_code, ir.Code{{Op: ir.OpLabel, S: endLabel}})
+	}
+
+	return &IfStmt{
+		NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n), Code: ir_code},
+		Cond:     cond,
+		Then:     thenBlk,
+		Else:     elseBlk,
+	}, nil
 }
 
 func (builder *Builder) buildWhileStmt(n *sitter.Node) (*WhileStmt, error) {
@@ -450,7 +608,41 @@ func (builder *Builder) buildWhileStmt(n *sitter.Node) (*WhileStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &WhileStmt{NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n)}, Cond: cond, Body: body}, nil
+
+	// --- IR generation for while ---
+	// while (cond) body
+	// Lcond:
+	//   cond.code
+	//   IfZ cond.addr -> Lend
+	//   body.code
+	//   Goto Lcond
+	// Lend:
+	condLabel := builder.getNewLabel()
+	endLabel := builder.getNewLabel()
+
+	ir_code := slices.Concat(
+		ir.Code{{Op: ir.OpLabel, S: condLabel}},
+		cond.getCode(),
+		ir.Code{{Op: ir.OpIfZ, A: cond.getAddress(), S: endLabel}},
+	)
+
+	if body != nil {
+		ir_code = slices.Concat(ir_code, body.getCode())
+	}
+
+	ir_code = slices.Concat(
+		ir_code,
+		ir.Code{
+			{Op: ir.OpGoto, S: condLabel},
+			{Op: ir.OpLabel, S: endLabel},
+		},
+	)
+
+	return &WhileStmt{
+		NodeBase: NodeBase{Line: nodeLine(n), Col: nodeCol(n), Code: ir_code},
+		Cond:     cond,
+		Body:     body,
+	}, nil
 }
 
 // ----------------------------------------------------------------------
@@ -461,17 +653,19 @@ func (builder *Builder) buildExpr(n *sitter.Node) (Expr, error) {
 	if n == nil {
 		return nil, builderErrorf(n, "nil expression node")
 	}
-	addr := builder.getNewOffsetAddress()
 
 	switch n.Kind() {
 	case "num":
 		// parse int
 		var v int
 		fmt.Sscanf(text(n, builder.src), "%d", &v)
+		addr := builder.getNewOffsetAddress()
 		return &IntLiteral{NodeBase: NodeBase{Code: []ir.Instr{{Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(v)}}, Line: nodeLine(n), Col: nodeCol(n)}, Value: v, Type: TypeInteger, ExprBase: ExprBase{Address: addr}}, nil
 	case "true":
+		addr := builder.getNewOffsetAddress()
 		return &BoolLiteral{NodeBase: NodeBase{Code: []ir.Instr{{Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(1)}}, Line: nodeLine(n), Col: nodeCol(n)}, Value: true, Type: TypeBool, ExprBase: ExprBase{Address: addr}}, nil
 	case "false":
+		addr := builder.getNewOffsetAddress()
 		return &BoolLiteral{NodeBase: NodeBase{Code: []ir.Instr{{Op: ir.OpCopy, D: addr, A: builder.getLiteralAddress(0)}}, Line: nodeLine(n), Col: nodeCol(n)}, Value: true, Type: TypeBool, ExprBase: ExprBase{Address: addr}}, nil
 	case "identifier":
 		name := Identifier(text(n, builder.src))
@@ -528,7 +722,7 @@ func (builder *Builder) getNewOffsetAddress() ir.Addr {
 
 	addr := ir.Addr{
 		Kind:  ir.Offset,
-		Value: builder.getNewOffset(),
+		Value: builder.getNewLocalOffset(),
 	}
 
 	return addr
@@ -600,6 +794,7 @@ func (builder *Builder) buildBinaryExpr(n *sitter.Node) (Expr, error) {
 	case "bool_conjunction":
 		expIsBoolean = true
 		// TODO: fixear este error haciendo codigo de saltos y COPY
+		// ? Está fixeado esto?
 		op = BinAnd
 		t = TypeBool
 

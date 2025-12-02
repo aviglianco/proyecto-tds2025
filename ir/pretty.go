@@ -8,60 +8,85 @@ import (
 // PrettyPrint formats a Code (slice of Instr) into a human-readable string.
 func PrettyPrint(code Code) string {
 	var sb strings.Builder
+	indent := ""
+	needsBlankLineBefore := false
+
+	isControlLabel := func(name string) bool {
+		// Control-flow labels are auto-generated like L1, L2, ...
+		return strings.HasPrefix(name, "L")
+	}
+
+	formatAddr := func(a Addr) string {
+		return a.String()
+	}
 
 	for i, instr := range code {
-		sb.WriteString(fmt.Sprintf("%3d: %s", i, instr.Op))
+		// Insert a blank line before function labels (not control labels),
+		// except before the very first emitted line.
+		if instr.Op == OpLabel && instr.S != "" && !isControlLabel(instr.S) {
+			if needsBlankLineBefore {
+				sb.WriteByte('\n')
+			}
+		}
+
+		// Do not print numeric indices to keep an assembly-like look
+		_ = i
 
 		switch instr.Op {
 
 		// Label
 		case OpLabel:
 			if instr.S != "" {
-				sb.WriteString(fmt.Sprintf(" %s", instr.S))
+				// Print both function and control-flow labels uniformly
+				sb.WriteString(fmt.Sprintf("%s:\n", instr.S))
+				indent = "  "
+				needsBlankLineBefore = true
+				continue
 			}
+			// Anonymous label (unlikely)
+			sb.WriteString(":\n")
+			indent = "  "
+			needsBlankLineBefore = true
+			continue
 
 		// Calls (arity K)
 		case OpCall:
-			sb.WriteString(fmt.Sprintf(" %s(%d args)", instr.A, instr.K))
-			if instr.D.Kind != Offset || instr.D.Value != 0 {
-				// Destination only printed if meaningful
-				sb.WriteString(fmt.Sprintf(" -> %s", instr.D))
+			callee := instr.S
+			if callee == "" {
+				callee = "<call>"
 			}
+			dest := formatAddr(instr.D)
+			// OpCall name, argc -> D
+			sb.WriteString(fmt.Sprintf("%sOpCall %s, %d -> %s", indent, callee, instr.K, dest))
 
 		case OpRetV:
-			sb.WriteString(fmt.Sprintf(" %s", instr.A))
+			// OpRetV A
+			sb.WriteString(fmt.Sprintf("%sOpRetV %s", indent, formatAddr(instr.A)))
 
 		case OpRet:
-			// no operands, just return
+			// OpRet
+			sb.WriteString(fmt.Sprintf("%sOpRet", indent))
 
 		// Unary ops
 		case OpNot, OpCopy:
-			sb.WriteString(fmt.Sprintf(" %s -> %s", instr.A, instr.D))
+			// OpNot D, A  |  OpCopy D, A
+			sb.WriteString(fmt.Sprintf("%s%s %s, %s", indent, instr.Op.String(), formatAddr(instr.D), formatAddr(instr.A)))
 
 		// Jumps
 		case OpGoto:
-			sb.WriteString(fmt.Sprintf(" %s", instr.S))
+			sb.WriteString(fmt.Sprintf("%sOpGoto %s", indent, instr.S))
 
 		case OpIfZ:
-			sb.WriteString(fmt.Sprintf(" %s -> %s", instr.A, instr.S))
+			sb.WriteString(fmt.Sprintf("%sOpIfZ %s, %s", indent, formatAddr(instr.A), instr.S))
+
+		case OpParam:
+			// OpParam A
+			sb.WriteString(fmt.Sprintf("%sOpParam %s", indent, formatAddr(instr.A)))
 
 		// Binary ops (A, B -> D)
 		default:
-			// Many ops have 3 addresses D, A, B
-			// Only print those that are meaningfully used
-			hasA := instr.A.Kind == Literal || instr.A.Kind == Global || (instr.A.Kind == Offset)
-			hasB := instr.B.Kind == Literal || instr.B.Kind == Global || (instr.B.Kind == Offset)
-			hasD := instr.D.Kind == Literal || instr.D.Kind == Global || (instr.D.Kind == Offset)
-
-			if hasD {
-				sb.WriteString(fmt.Sprintf(" %s", instr.D))
-			}
-			if hasA {
-				sb.WriteString(fmt.Sprintf(", %s", instr.A))
-			}
-			if hasB {
-				sb.WriteString(fmt.Sprintf(", %s", instr.B))
-			}
+			// Ternary form: OpX D, A, B  (e.g., OpAdd D, A, B)
+			sb.WriteString(fmt.Sprintf("%s%s %s, %s, %s", indent, instr.Op.String(), formatAddr(instr.D), formatAddr(instr.A), formatAddr(instr.B)))
 		}
 
 		sb.WriteByte('\n')

@@ -93,7 +93,8 @@ type MethodDecl struct {
 	Extern bool
 }
 
-func (m *MethodDecl) NodeType() string { return "MethodDecl" }
+func (m *MethodDecl) NodeType() string    { return "MethodDecl" }
+func (m *MethodDecl) getCode() []ir.Instr { return m.Code }
 
 // ===== Statements =====
 
