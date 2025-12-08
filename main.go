@@ -98,7 +98,7 @@ func main() {
 	base := inputArg[:len(inputArg)-len(filepath.Ext(inputArg))]
 	baseName := filepath.Base(base)
 	resultsDir := "result"
-	if err := os.MkdirAll(resultsDir, 0755); err != nil {
+	if err := os.MkdirAll(resultsDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error creating results directory: %v\n", err)
 		os.Exit(1)
 	}
@@ -106,7 +106,7 @@ func main() {
 	// Pretty-print the syntax tree and write to .sint file in result folder
 	output := []byte(root.ToSexp())
 	outputPath := filepath.Join(resultsDir, baseName+".sint")
-	if err := os.WriteFile(outputPath, output, 0644); err != nil {
+	if err := os.WriteFile(outputPath, output, 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
 		os.Exit(1)
 	}
@@ -115,7 +115,7 @@ func main() {
 	// Write AST (semantic stage) to .sem file in result folder
 	semPath := filepath.Join(resultsDir, baseName+".sem")
 	if ast != nil {
-		if err := os.WriteFile(semPath, []byte(ast.String()), 0644); err != nil {
+		if err := os.WriteFile(semPath, []byte(ast.String()), 0o644); err != nil {
 			fmt.Fprintf(os.Stderr, "error writing AST output: %v\n", err)
 			os.Exit(1)
 		}
@@ -124,9 +124,11 @@ func main() {
 
 	// Write IR to .ci file in result folder
 	ciPath := filepath.Join(resultsDir, baseName+".ci")
-	if err := os.WriteFile(ciPath, []byte(ir.PrettyPrint(ir_code)), 0644); err != nil {
+	if err := os.WriteFile(ciPath, []byte(ir.PrettyPrint(ir_code)), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "error writing IR output: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("IR written to:", ciPath)
+
+	fmt.Println(ir.GenerateX86(ir_code))
 }
