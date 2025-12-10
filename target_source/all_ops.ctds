@@ -1,0 +1,60 @@
+program
+{
+    integer print_int(integer i) extern;
+    integer print_bool(bool b) extern;
+
+    integer id(integer x) {
+        return x;
+    }
+
+    integer inc(integer x) {
+        return x + 1;
+    }
+
+    void main() {
+        integer a = 10;
+        integer b = 3;
+        integer c = 0;
+        bool t = false;
+
+        // Arithmetic
+        c = a + b;         // 13
+        print_int(c);
+        c = a - b;         // 7
+        print_int(c);
+        c = a * b;         // 30
+        print_int(c);
+        c = a / b;         // 3 (integer div)
+        print_int(c);
+        c = a % b;         // 1
+        print_int(c);
+
+        // Relations
+        t = a < b;         // false
+        print_bool(t);
+        t = a > b;         // true
+        print_bool(t);
+        t = a == b;        // false
+        print_bool(t);
+        t = !(a == b);     // true
+        print_bool(t);
+        t = (a < b) && (b < 5); // false && true -> false
+        print_bool(t);
+        t = (a > b) && (b < 5); // true && true -> true
+        print_bool(t);
+
+        // Function calls
+        c = inc(a);        // 11
+        print_int(c);
+        c = id(b);         // 3
+        print_int(c);
+
+        // Branching
+        if (a - b > 5) then {
+            print_int(999);
+        } else {
+            print_int(555);
+        }
+    }
+}
+

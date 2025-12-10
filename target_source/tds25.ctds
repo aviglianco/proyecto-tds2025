@@ -14,12 +14,11 @@ program
 
         void main() {
           integer y = 0;
-          y = get_int();
-
-          if (y < 5) then {
-            inc(y);
-          } else {
+          
+          while (y<5) {
             print_int(y);
+            y = y + 1;
           }
+          
         }
 }

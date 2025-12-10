@@ -30,19 +30,22 @@ program {
     integer g = 1;
 
     // call as expression and as statement (result ignored)
-    i = inc(get_int());
+    i = inc(1);
     inc(0);
+    print_int(i);
 
     // arithmetic + unary minus + % + parentheses (exercise precedence)
-    i = (i * 2 + -1) / 3 % 2;
+    i = (i * 2 + -1) / 3 * 2;
+    print_int(i);
 
     // relational + equality + logical with short-circuit types
     flag = (i < 10) && !(i == 5);
+    print_bool(flag);
     flag = flag || (true == false);
 
     // while + nested block + empty statement
     while (i < 5 && !flag) {
-      { integer t = i; ; }
+      { integer t = i; print_int(t); ; }
       i = i + 1;
       if (i == 3) then { print_int(i); } else { ; }
     }
